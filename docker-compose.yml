@@ -1,0 +1,26 @@
+# Portainer stack: Repository, compose path docker-compose.yml.
+services:
+  mealprep:
+    build: .
+    image: mealprep:latest
+    # Rebuild on every deploy, so "Pull and redeploy" picks up changes from GitHub
+    pull_policy: build
+    container_name: mealprep
+    restart: unless-stopped
+    # No host port: plain HTTP on port 8080, only on the "proxy" network. Traefik there
+    # terminates HTTPS and forwards to http://mealprep:8080 (configured in Traefik).
+    expose:
+      - "8080"
+    networks:
+      - proxy
+    environment:
+      TZ: Europe/Oslo
+      # Household password for the app, set in the stack's Environment variables.
+      APP_PASSWORD: ${APP_PASSWORD}
+    volumes:
+      # The database (recipes, plan, pantry, Oda sign-in) lives here.
+      - /opt/mealprep:/data
+
+networks:
+  proxy:
+    external: true
