@@ -82,7 +82,8 @@ a { color: var(--accent); }
 .tabs a.active { background: var(--accent-soft); color: var(--accent); }
 .top-actions { display: flex; margin-left: auto; }
 main { max-width: 1040px; margin: 0 auto; padding: 16px 16px 24px; display: grid; gap: 12px; }
-main[data-tab="shopping"] { max-width: 760px; }
+main[data-tab="shopping"], main[data-tab="week"] { max-width: 760px; }
+.week-list { display: grid; gap: 12px; }
 .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; }
 .cards-grid.top-aligned { align-items: start; }
 .cards-grid:empty { display: none; }

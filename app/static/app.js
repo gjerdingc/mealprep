@@ -262,7 +262,7 @@ async function renderWeek() {
       h('div', { class: 'grow muted' }, 'Legg til hvem som lager mat, så hver middag kan få en kokk.'),
       h('button', { class: 'small', onclick: openSettings }, 'Legg til kokker')));
   }
-  nodes.push(h('div', { class: 'cards-grid' }, [0, 1, 2, 3, 4, 5, 6].map((i) => dayCard(addDays(weekStart, i)))));
+  nodes.push(h('div', { class: 'week-list' }, [0, 1, 2, 3, 4, 5, 6].map((i) => dayCard(addDays(weekStart, i)))));
   view.replaceChildren(...nodes);
 }
 
