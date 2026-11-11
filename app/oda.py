@@ -5,6 +5,7 @@ oda.com, and the resulting tokens are stored in the local database. Tool calls g
 to Oda's MCP server. Oda's MCP has no checkout: the app can only fill the cart.
 """
 
+import asyncio
 import base64
 import hashlib
 import json
@@ -18,6 +19,8 @@ from . import db
 
 MCP_URL = "https://oda.com/mcp"
 METADATA_URL = "https://oda.com/.well-known/oauth-authorization-server"
+# The shop's own product search. Unlike the MCP search it includes product pictures.
+SHOP_SEARCH_URL = "https://oda.com/api/v1/search/"
 PROTOCOL_VERSION = "2025-06-18"
 CLIENT_NAME = "Middagsplanlegger"
 HEADERS = {"User-Agent": "dinner-planner/1.0"}
@@ -294,21 +297,64 @@ def _slim(p):
         "unit_price": p.get("unitPrice"),
         "unit_name": p.get("unitName"),
         "url": p.get("url"),
+        "image": None,
         "available": availability.get("isAvailable", True),
     }
 
 
-async def search(queries):
-    """Returns {query: [products]} for each query."""
+def _slim_shop(p):
+    images = p.get("images") or []
+    image = None
+    if images:
+        image = (images[0].get("thumbnail") or {}).get("url") or (images[0].get("large") or {}).get("url")
+    availability = p.get("availability") or {}
+    return {
+        "id": p.get("id"),
+        "name": p.get("full_name") or p.get("name"),
+        "description": p.get("name_extra") or "",
+        "brand": "",
+        "price": p.get("gross_price"),
+        "unit_price": p.get("gross_unit_price"),
+        "unit_name": p.get("unit_price_quantity_abbreviation"),
+        "url": p.get("front_url"),
+        "image": image,
+        "available": availability.get("is_available", True),
+    }
+
+
+async def _shop_search(queries, size):
+    limit = asyncio.Semaphore(4)
+    async with _client() as http:
+
+        async def one(query):
+            async with limit:
+                res = await http.get(SHOP_SEARCH_URL, params={"q": query})
+                res.raise_for_status()
+                return [_slim_shop(p) for p in (res.json().get("products") or [])[:size]]
+
+        results = await asyncio.gather(*(one(q) for q in queries))
+    return dict(zip(queries, results))
+
+
+async def _mcp_search(queries, size):
     out = {}
-    queries = list(dict.fromkeys(q for q in queries if q))
     for i in range(0, len(queries), 10):
         chunk = queries[i : i + 10]
-        res = await call_tool("product_search", {"queries": chunk, "size": 5})
+        res = await call_tool("product_search", {"queries": chunk, "size": size})
         entries = res.get("result") if isinstance(res, dict) else res
         for entry in entries or []:
             out[entry.get("query")] = [_slim(p) for p in entry.get("products") or []]
     return out
+
+
+async def search(queries, size=8):
+    """Returns {query: [products]}. Uses the shop search for its pictures and falls
+    back to the MCP search (no pictures, needs the Oda sign-in) if that fails."""
+    queries = list(dict.fromkeys(q for q in queries if q))
+    try:
+        return await _shop_search(queries, size)
+    except (httpx.HTTPError, ValueError, AttributeError):
+        return await _mcp_search(queries, size)
 
 
 async def add_to_cart(operations):

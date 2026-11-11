@@ -594,6 +594,7 @@ class CartItem(BaseModel):
     product_name: str
     price: str | None = None
     url: str | None = None
+    image: str | None = None
     quantity: int = 1
 
 
@@ -615,10 +616,10 @@ async def oda_cart(body: CartIn):
     with db.conn() as c:
         for i in items:  # remember the choice for next time
             c.execute(
-                "INSERT INTO oda_products(key, product_id, name, price, url) VALUES(?,?,?,?,?) "
+                "INSERT INTO oda_products(key, product_id, name, price, url, image) VALUES(?,?,?,?,?,?) "
                 "ON CONFLICT(key) DO UPDATE SET product_id=excluded.product_id, "
-                "name=excluded.name, price=excluded.price, url=excluded.url",
-                (norm(i.name), i.product_id, i.product_name, i.price, i.url),
+                "name=excluded.name, price=excluded.price, url=excluded.url, image=excluded.image",
+                (norm(i.name), i.product_id, i.product_name, i.price, i.url, i.image),
             )
     return cart
 

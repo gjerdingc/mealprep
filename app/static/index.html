@@ -11,19 +11,21 @@
 </head>
 <body>
   <header class="top">
-    <h1>Middagsplan</h1>
-    <div class="row">
-      <button id="theme-btn" class="ghost" aria-label="Velg tema" title="Velg tema">🎨 Tema</button>
-      <button id="settings-btn" class="ghost" aria-label="Innstillinger">⚙️ Innstillinger</button>
+    <div class="top-inner">
+      <h1>Middagsplan</h1>
+      <nav class="tabs" id="tabs">
+        <a href="#week" data-tab="week"><span>📅</span>Uke</a>
+        <a href="#recipes" data-tab="recipes"><span>📖</span>Oppskrifter</a>
+        <a href="#pantry" data-tab="pantry"><span>🧂</span>Basisvarer</a>
+        <a href="#shopping" data-tab="shopping"><span>🛒</span>Handleliste</a>
+      </nav>
+      <div class="top-actions">
+        <button id="theme-btn" class="ghost" aria-label="Velg tema" title="Velg tema">🎨<span> Tema</span></button>
+        <button id="settings-btn" class="ghost" aria-label="Innstillinger" title="Innstillinger">⚙️<span> Innstillinger</span></button>
+      </div>
     </div>
   </header>
   <main id="view"></main>
-  <nav class="tabs" id="tabs">
-    <a href="#week" data-tab="week"><span>📅</span>Uke</a>
-    <a href="#recipes" data-tab="recipes"><span>📖</span>Oppskrifter</a>
-    <a href="#pantry" data-tab="pantry"><span>🧂</span>Basisvarer</a>
-    <a href="#shopping" data-tab="shopping"><span>🛒</span>Handleliste</a>
-  </nav>
   <dialog id="dlg">
     <div class="dlg-head">
       <h2 id="dlg-title"></h2>

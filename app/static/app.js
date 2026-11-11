@@ -110,11 +110,12 @@ const memberName = (id) => (S.members.find((m) => m.id === id) || {}).name;
 let dlgIsForm = false;
 let dlgDirty = false;
 
-function openDialog(title, nodes, { form = false } = {}) {
+function openDialog(title, nodes, { form = false, wide = false } = {}) {
   dlgIsForm = form;
+  dlg.classList.toggle('wide', wide);
   dlgDirty = false;
   document.getElementById('dlg-title').textContent = title;
-  document.getElementById('dlg-body').replaceChildren(...[nodes].flat());
+  document.getElementById('dlg-body').replaceChildren(...[nodes].flat(Infinity).filter((n) => n != null && n !== false));
   if (!dlg.open) dlg.showModal();
   dlg.scrollTop = 0;
 }
@@ -199,6 +200,7 @@ async function refresh() { S = await api('GET', '/state'); }
 async function render() {
   if (!S) return;
   const tab = currentTab();
+  view.dataset.tab = tab;
   for (const a of document.querySelectorAll('#tabs a')) a.classList.toggle('active', a.dataset.tab === tab);
   await run({ week: renderWeek, recipes: renderRecipes, pantry: renderPantry, shopping: renderShopping }[tab]);
 }
@@ -260,7 +262,7 @@ async function renderWeek() {
       h('div', { class: 'grow muted' }, 'Legg til hvem som lager mat, så hver middag kan få en kokk.'),
       h('button', { class: 'small', onclick: openSettings }, 'Legg til kokker')));
   }
-  for (let i = 0; i < 7; i++) nodes.push(dayCard(addDays(weekStart, i)));
+  nodes.push(h('div', { class: 'cards-grid' }, [0, 1, 2, 3, 4, 5, 6].map((i) => dayCard(addDays(weekStart, i)))));
   view.replaceChildren(...nodes);
 }
 
@@ -376,11 +378,9 @@ function renderRecipes() {
   if (!S.recipes.length) {
     nodes.push(h('div', { class: 'card empty' }, 'Ingen oppskrifter ennå. Legg inn middagene dere allerede lager – fem–seks holder for å komme i gang.'));
   }
-  for (const r of S.recipes) {
-    nodes.push(h('button', { class: 'card recipe-card', onclick: () => openRecipe(r.id) },
-      h('h3', null, r.name),
-      h('div', { class: 'muted' }, [timeText(r), `${r.ingredients.length} ingredienser`, `${r.servings} porsjoner`].filter(Boolean).join(' · '))));
-  }
+  nodes.push(h('div', { class: 'cards-grid' }, S.recipes.map((r) => h('button', { class: 'card recipe-card', onclick: () => openRecipe(r.id) },
+    h('h3', null, r.name),
+    h('div', { class: 'muted' }, [timeText(r), `${r.ingredients.length} ingredienser`, `${r.servings} porsjoner`].filter(Boolean).join(' · '))))));
   view.replaceChildren(...nodes);
 }
 
@@ -535,11 +535,11 @@ function renderPantry() {
       h('div', { class: 'list' }, out.map(row))));
   }
   const groups = [...new Set([...S.settings.categories, ...S.pantry.map((p) => p.category)])];
-  for (const g of groups) {
+  nodes.push(h('div', { class: 'cards-grid top-aligned' }, groups.map((g) => {
     const items = S.pantry.filter((p) => p.category === g && p.in_stock);
-    if (!items.length) continue;
-    nodes.push(h('div', { class: 'card' }, h('div', { class: 'section-title', style: 'margin:0' }, g), h('div', { class: 'list' }, items.map(row))));
-  }
+    if (!items.length) return null;
+    return h('div', { class: 'card' }, h('div', { class: 'section-title', style: 'margin:0' }, g), h('div', { class: 'list' }, items.map(row)));
+  })));
   view.replaceChildren(...nodes);
 }
 
@@ -622,11 +622,6 @@ function priceText(p) {
   return /^[\d.,\s]+$/.test(String(p.price)) ? `${p.price} kr` : String(p.price);
 }
 
-function productLabel(p) {
-  return [[p.name, p.brand].filter(Boolean).join(', '), p.description, priceText(p)].filter(Boolean).join(' · ')
-    + (p.available === false ? ' (ikke tilgjengelig)' : '');
-}
-
 function odaConnectDialog() {
   openDialog('Koble til Oda', [
     h('p', null, 'Koble til Oda-kontoen én gang, så kan appen finne varene på handlelista og legge dem i handlekurven hos Oda.'),
@@ -640,53 +635,95 @@ async function openOda(list) {
   if (!items.length) return toast('Ingenting igjen å kjøpe');
   if (!S.oda_connected) return odaConnectDialog();
 
-  openDialog('Fyll Oda-handlekurven', [h('p', { class: 'muted' }, 'Slår opp varene hos Oda …')]);
+  openDialog('Fyll Oda-handlekurven', [h('p', { class: 'muted' }, 'Slår opp varene hos Oda …')], { wide: true });
   let found = {};
   try {
-    const need = items.filter((i) => !i.oda).map((i) => i.name);
-    if (need.length) found = await api('POST', '/oda/search', { queries: need });
+    found = await api('POST', '/oda/search', { queries: items.map((i) => i.name) });
   } catch (e) {
     if (e.status === 409) { S.oda_connected = false; return odaConnectDialog(); }
     return openDialog('Fyll Oda-handlekurven', [h('p', null, e.message)]);
   }
 
+  const total = h('strong');
+  const updateTotal = () => {
+    const chosen = rows.map((r) => r.get()).filter(Boolean);
+    const sum = chosen.reduce((s, c) => s + (parseFloat(c.price) || 0) * c.quantity, 0);
+    total.textContent = `${chosen.length} av ${rows.length} valgt · ca. ${sum.toFixed(2).replace('.', ',')} kr`;
+  };
+
   const rows = items.map((item) => {
-    let products = item.oda
-      ? [{ id: item.oda.product_id, name: item.oda.name, price: item.oda.price, url: item.oda.url }]
-      : (found[item.name] || []);
-    const select = h('select', { 'aria-label': `Oda-vare for ${item.name}` });
-    const qty = h('input', { type: 'number', min: 0, max: 30, inputMode: 'numeric', value: 1, 'aria-label': 'Antall' });
-    const fill = () => select.replaceChildren(
-      ...products.map((p) => h('option', { value: String(p.id) }, productLabel(p))),
-      h('option', { value: '' }, products.length ? 'Hopp over denne' : 'Fant ingen treff – hopp over'));
-    fill();
-    const term = h('input', { placeholder: 'Søk hos Oda etter …', value: item.name });
-    const el = h('div', { class: 'oda-row' },
-      h('div', { class: 'label' }, itemText(item), item.oda ? h('span', { class: 'muted' }, ' · deres faste') : null),
-      h('div', { class: 'controls' }, select, qty),
-      h('details', null, h('summary', { class: 'muted' }, 'Velg en annen vare'),
-        h('form', {
-          class: 'row', style: 'margin-top:6px',
-          onsubmit: (e) => {
-            e.preventDefault();
-            const q = term.value.trim();
-            if (!q) return;
-            run(async () => {
-              const res = await api('POST', '/oda/search', { queries: [q] });
-              products = res[q] || Object.values(res)[0] || [];
-              fill();
-              if (!products.length) toast('Oda fant ingenting');
-            });
-          },
-        }, h('div', { class: 'grow' }, term), h('button', { class: 'small', type: 'submit' }, 'Søk'))));
-    const get = () => {
-      const p = products.find((x) => String(x.id) === select.value);
-      const n = parseInt(qty.value, 10) || 0;
-      if (!p || n <= 0) return null;
-      return { name: item.name, product_id: p.id, product_name: p.name, price: p.price == null ? null : String(p.price), url: p.url || null, quantity: n };
+    // The product chosen last time for this ingredient, if any.
+    const usual = item.oda && { id: item.oda.product_id, name: item.oda.name, price: item.oda.price, url: item.oda.url, image: item.oda.image };
+    let products = [];
+    let selected = null;
+    let count = 1;
+    const cards = h('div', { class: 'products' });
+    const state = h('span', { class: 'badge' });
+
+    const card = (p) => {
+      const on = p.id === selected;
+      const toggle = () => { selected = on ? null : p.id; draw(); };
+      const step = (delta) => (e) => { e.stopPropagation(); count = Math.max(1, Math.min(30, count + delta)); draw(); };
+      return h('div', {
+        class: `product${on ? ' on' : ''}${p.available === false ? ' unavailable' : ''}`,
+        role: 'button', tabIndex: 0, 'aria-pressed': String(on),
+        onclick: toggle,
+        onkeydown: (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } },
+      },
+        p.image
+          ? h('img', { src: p.image, alt: '', loading: 'lazy', referrerPolicy: 'no-referrer' })
+          : h('div', { class: 'no-image' }, '🛒'),
+        on && h('span', { class: 'check' }, '✓'),
+        h('div', { class: 'product-name' }, p.name),
+        h('div', { class: 'muted product-extra' }, [p.description, p.available === false ? 'ikke tilgjengelig' : ''].filter(Boolean).join(' · ')),
+        h('div', { class: 'product-price' }, priceText(p)),
+        usual && p.id === usual.id && h('span', { class: 'badge ok' }, 'Deres faste'),
+        on && h('div', { class: 'stepper' },
+          h('button', { type: 'button', class: 'small', 'aria-label': 'Færre', onclick: step(-1) }, '−'),
+          h('span', null, `${count} stk`),
+          h('button', { type: 'button', class: 'small', 'aria-label': 'Flere', onclick: step(1) }, '+')));
     };
-    return { el, get };
+    const draw = () => {
+      cards.replaceChildren(...products.map(card));
+      if (!products.length) cards.append(h('p', { class: 'muted' }, 'Fant ingen varer. Prøv et annet søkeord under.'));
+      state.className = `badge ${selected == null ? 'warn' : 'ok'}`;
+      state.textContent = selected == null ? 'Hoppes over' : 'Valgt';
+      updateTotal();
+    };
+    const setProducts = (list) => {
+      products = list;
+      if (usual) products = [list.find((p) => p.id === usual.id) || usual, ...list.filter((p) => p.id !== usual.id)];
+      const firstAvailable = products.find((p) => p.available !== false);
+      selected = usual ? usual.id : (firstAvailable ? firstAvailable.id : null);
+    };
+    setProducts(found[item.name] || []);
+
+    const term = h('input', { placeholder: 'Søk hos Oda etter noe annet', value: item.name, 'aria-label': `Søk hos Oda for ${item.name}` });
+    const el = h('div', { class: 'oda-row' },
+      h('div', { class: 'row' }, h('h3', { class: 'grow' }, itemText(item)), state),
+      cards,
+      h('form', {
+        class: 'row oda-search',
+        onsubmit: (e) => {
+          e.preventDefault();
+          const q = term.value.trim();
+          if (!q) return;
+          run(async () => {
+            const res = await api('POST', '/oda/search', { queries: [q] });
+            setProducts(res[q] || Object.values(res)[0] || []);
+            draw();
+            if (!products.length) toast('Oda fant ingenting');
+          });
+        },
+      }, h('div', { class: 'grow' }, term), h('button', { class: 'small', type: 'submit' }, 'Søk')));
+    const get = () => {
+      const p = products.find((x) => x.id === selected);
+      if (!p) return null;
+      return { name: item.name, product_id: p.id, product_name: p.name, price: p.price == null ? null : String(p.price), url: p.url || null, image: p.image || null, quantity: count };
+    };
+    return { el, get, draw };
   });
+  rows.forEach((r) => r.draw());
 
   const send = h('button', { class: 'primary' }, 'Legg i Oda-handlekurven');
   send.addEventListener('click', async () => {
@@ -711,10 +748,10 @@ async function openOda(list) {
   });
 
   openDialog('Fyll Oda-handlekurven', [
-    h('p', { class: 'muted' }, 'Velg vare og antall pakker for hver ting. Appen husker valgene til neste gang.'),
-    h('div', { class: 'card' }, rows.map((r) => r.el)),
-    send,
-  ]);
+    h('p', { class: 'muted' }, 'Trykk på varen dere vil ha. Trykk på den en gang til for å hoppe over. Appen husker valgene til neste gang.'),
+    rows.map((r) => h('div', { class: 'card' }, r.el)),
+    h('div', { class: 'oda-footer' }, total, send),
+  ], { wide: true });
 }
 
 // ----------------------------------------------------------------- settings

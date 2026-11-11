@@ -83,6 +83,9 @@ def init():
     with conn() as c:
         c.execute("PRAGMA journal_mode=WAL")
         c.executescript(SCHEMA)
+        columns = {r["name"] for r in c.execute("PRAGMA table_info(oda_products)")}
+        if "image" not in columns:
+            c.execute("ALTER TABLE oda_products ADD COLUMN image TEXT")
 
 
 def get_setting(c, key, default=None):
