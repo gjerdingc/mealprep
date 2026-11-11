@@ -19,7 +19,7 @@ from . import db
 MCP_URL = "https://oda.com/mcp"
 METADATA_URL = "https://oda.com/.well-known/oauth-authorization-server"
 PROTOCOL_VERSION = "2025-06-18"
-CLIENT_NAME = "Dinner planner"
+CLIENT_NAME = "Middagsplanlegger"
 HEADERS = {"User-Agent": "dinner-planner/1.0"}
 TIMEOUT = httpx.Timeout(30.0)
 
@@ -80,7 +80,7 @@ async def start_connect(redirect_uri):
                 },
             )
             if res.status_code >= 400:
-                raise OdaError(f"Oda refused to register this app: {res.text[:300]}")
+                raise OdaError(f"Oda ville ikke registrere appen: {res.text[:300]}")
             reg = res.json()
             state = {
                 "client_id": reg["client_id"],
@@ -127,7 +127,7 @@ async def finish_connect(code, returned_state):
     state = _load()
     pending = state.get("pending")
     if not pending or not secrets.compare_digest(pending["state"], returned_state or ""):
-        raise OdaError("The sign-in did not match a request from this app. Try connecting again.")
+        raise OdaError("Innloggingen stemte ikke med en forespørsel fra denne appen. Prøv å koble til på nytt.")
     async with _client() as http:
         res = await _token_request(
             http,
@@ -141,7 +141,7 @@ async def finish_connect(code, returned_state):
             },
         )
     if res.status_code >= 400:
-        raise OdaError(f"Oda did not accept the sign-in: {res.text[:300]}")
+        raise OdaError(f"Oda godtok ikke innloggingen: {res.text[:300]}")
     _store_tokens(state, res.json())
     state.pop("pending", None)
     _save(state)
@@ -168,12 +168,12 @@ async def disconnect():
 async def _access_token(http, force_refresh=False):
     state = _load()
     if not state.get("access_token"):
-        raise NotConnected("Oda is not connected.")
+        raise NotConnected("Oda er ikke koblet til.")
     if not force_refresh and state.get("expires_at", 0) - 60 > time.time():
         return state["access_token"]
     if not state.get("refresh_token"):
         if force_refresh:
-            raise NotConnected("The Oda sign-in has expired. Connect again.")
+            raise NotConnected("Innloggingen hos Oda har utløpt. Koble til på nytt.")
         return state["access_token"]
     res = await _token_request(
         http, state, {"grant_type": "refresh_token", "refresh_token": state["refresh_token"]}
@@ -182,7 +182,7 @@ async def _access_token(http, force_refresh=False):
         for key in ("access_token", "refresh_token", "expires_at"):
             state.pop(key, None)
         _save(state)
-        raise NotConnected("The Oda sign-in has expired. Connect again.")
+        raise NotConnected("Innloggingen hos Oda har utløpt. Koble til på nytt.")
     _store_tokens(state, res.json())
     _save(state)
     return state["access_token"]
@@ -203,7 +203,7 @@ def _parse_rpc(res, request_id):
                 continue
             if isinstance(msg, dict) and msg.get("id") == request_id:
                 return msg
-        raise OdaError("Oda sent no answer.")
+        raise OdaError("Oda svarte ikke.")
     return res.json()
 
 
@@ -226,14 +226,14 @@ async def _rpc(http, token, session, method, params=None, request_id=None):
     if res.status_code == 401:
         raise PermissionError
     if res.status_code >= 400:
-        raise OdaError(f"Oda answered {res.status_code}: {res.text[:300]}")
+        raise OdaError(f"Oda svarte {res.status_code}: {res.text[:300]}")
     if res.headers.get("mcp-session-id"):
         session["id"] = res.headers["mcp-session-id"]
     if request_id is None:
         return None
     msg = _parse_rpc(res, request_id)
     if msg.get("error"):
-        raise OdaError(msg["error"].get("message") or "Oda reported an error.")
+        raise OdaError(msg["error"].get("message") or "Oda meldte om en feil.")
     return msg.get("result") or {}
 
 
@@ -258,7 +258,7 @@ async def _call_once(http, token, name, arguments):
     )
     text = "".join(c.get("text", "") for c in result.get("content") or [] if c.get("type") == "text")
     if result.get("isError"):
-        raise OdaError(text or "Oda reported an error.")
+        raise OdaError(text or "Oda meldte om en feil.")
     if result.get("structuredContent") is not None:
         return result["structuredContent"]
     try:
@@ -278,9 +278,9 @@ async def call_tool(name, arguments):
                 try:
                     return await _call_once(http, token, name, arguments)
                 except PermissionError:
-                    raise NotConnected("Oda no longer accepts the sign-in. Connect again.")
+                    raise NotConnected("Oda godtar ikke lenger innloggingen. Koble til på nytt.")
     except httpx.HTTPError as e:
-        raise OdaError(f"Could not reach Oda: {e}") from e
+        raise OdaError(f"Fikk ikke kontakt med Oda: {e}") from e
 
 
 def _slim(p):

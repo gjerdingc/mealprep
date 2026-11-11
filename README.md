@@ -1,21 +1,21 @@
-# Dinner plan
+# Middagsplan
 
 A small web app for planning family dinners: your own recipes, a week plan with a
 cook assigned to each day, pantry staples, and a shopping list that can be sent to
-an Oda cart.
+an Oda cart. The interface is in Norwegian (bokmål).
 
 ## What it does
 
-- **Week**: pick a dinner for each day and who cooks it. Today's dinner is shown on
+- **Uke** (week): pick a dinner for each day and who cooks it. Today's dinner is shown on
   top with the time cooking has to start. The dice picks a recipe you haven't had
   for a while.
-- **Recipes**: name, prep and cooking time, ingredients with amounts, instructions.
-- **Pantry**: staples you normally always have. Tap "We're out" and the item lands on
+- **Oppskrifter** (recipes): name, prep and cooking time, ingredients with amounts, instructions.
+- **Basisvarer** (pantry staples): staples you normally always have. Tap "Tomt" and the item lands on
   the shopping list.
-- **Shopping**: the ingredients for the coming days' dinners, added up across
+- **Handleliste** (shopping list): the ingredients for the coming days' dinners, added up across
   recipes. Ingredients that are pantry staples in stock are listed separately. Tick
-  off what you have, add anything else, and press "Done shopping" when it is bought.
-- **Oda**: connect an Oda account under Settings. "Fill my Oda cart" then looks up
+  off what you have, add anything else, and press "Ferdig handlet" when it is bought.
+- **Oda**: connect an Oda account under Innstillinger. "Fyll Oda-handlekurven" then looks up
   each item at Oda, lets you choose the product, and adds them to the cart. The app
   remembers the product chosen for each ingredient. Payment and delivery time are
   always done at oda.com; the app cannot order anything.

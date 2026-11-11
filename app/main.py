@@ -43,7 +43,7 @@ async def require_login(request: Request, call_next):
     path = request.url.path
     if APP_PASSWORD and path.startswith("/api/") and path != "/api/login":
         if not hmac.compare_digest(request.cookies.get(COOKIE, ""), _session_token()):
-            return JSONResponse({"detail": "Login required"}, status_code=401)
+            return JSONResponse({"detail": "Du må logge inn"}, status_code=401)
     return await call_next(request)
 
 
@@ -54,7 +54,7 @@ class LoginIn(BaseModel):
 @app.post("/api/login")
 def login(body: LoginIn, request: Request, response: Response):
     if not APP_PASSWORD or not hmac.compare_digest(body.password.encode(), APP_PASSWORD.encode()):
-        raise HTTPException(401, "Wrong password")
+        raise HTTPException(401, "Feil passord")
     response.set_cookie(
         COOKIE,
         _session_token(),
@@ -114,7 +114,7 @@ class NameIn(BaseModel):
 def add_member(body: NameIn):
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "Name is required")
+        raise HTTPException(400, "Navn mangler")
     with db.conn() as c:
         c.execute("INSERT INTO members(name) VALUES(?)", (name,))
     return {"ok": True}
@@ -136,7 +136,7 @@ def save_settings(body: SettingsIn):
     try:
         datetime.strptime(body.dinner_time, "%H:%M")
     except ValueError:
-        raise HTTPException(400, "Dinner time must look like 17:00")
+        raise HTTPException(400, "Middagstid må skrives som 17:00")
     with db.conn() as c:
         db.set_setting(c, "dinner_time", body.dinner_time)
     return {"ok": True}
@@ -176,7 +176,7 @@ def _write_ingredients(c, recipe_id, ingredients):
 def _recipe_values(body: RecipeIn):
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "The recipe needs a name")
+        raise HTTPException(400, "Oppskriften må ha et navn")
     return (
         name,
         max(0, body.prep_min),
@@ -207,7 +207,7 @@ def update_recipe(recipe_id: int, body: RecipeIn):
             (*values, recipe_id),
         )
         if cur.rowcount == 0:
-            raise HTTPException(404, "Recipe not found")
+            raise HTTPException(404, "Fant ikke oppskriften")
         _write_ingredients(c, recipe_id, body.ingredients)
         # Ingredients may have changed, so dinners already shopped for need a fresh look.
         c.execute(
@@ -230,7 +230,7 @@ def delete_recipe(recipe_id: int):
 
 class PantryIn(BaseModel):
     name: str
-    category: str = "Other"
+    category: str = "Annet"
 
 
 class PantryBulkIn(BaseModel):
@@ -245,15 +245,15 @@ class PantryPatch(BaseModel):
 def add_pantry(body: PantryIn):
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "Name is required")
+        raise HTTPException(400, "Navn mangler")
     with db.conn() as c:
         try:
             c.execute(
                 "INSERT INTO pantry(name, category) VALUES(?, ?)",
-                (name, body.category.strip() or "Other"),
+                (name, body.category.strip() or "Annet"),
             )
         except sqlite3.IntegrityError:
-            raise HTTPException(409, f"{name} is already in the pantry")
+            raise HTTPException(409, f"{name} finnes allerede i basisvarene")
     return {"ok": True}
 
 
@@ -262,7 +262,7 @@ def add_pantry_bulk(body: PantryBulkIn):
     with db.conn() as c:
         c.executemany(
             "INSERT OR IGNORE INTO pantry(name, category) VALUES(?, ?)",
-            [(i.name.strip(), i.category.strip() or "Other") for i in body.items if i.name.strip()],
+            [(i.name.strip(), i.category.strip() or "Annet") for i in body.items if i.name.strip()],
         )
     return {"ok": True}
 
@@ -295,7 +295,7 @@ def _parse_date(value: str) -> date:
     try:
         return date.fromisoformat(value)
     except ValueError:
-        raise HTTPException(400, "Dates must look like 2026-01-31")
+        raise HTTPException(400, "Dato må skrives som 2026-01-31")
 
 
 @app.get("/api/plan")
@@ -464,7 +464,7 @@ def check_item(body: CheckIn):
 def add_extra(body: NameIn):
     name = body.name.strip()
     if not name:
-        raise HTTPException(400, "Write what to add")
+        raise HTTPException(400, "Skriv hva som skal legges til")
     with db.conn() as c:
         c.execute("INSERT INTO shopping_extra(name) VALUES(?)", (name,))
     return {"ok": True}
@@ -557,7 +557,7 @@ class CartIn(BaseModel):
 async def oda_cart(body: CartIn):
     items = [i for i in body.items if i.quantity > 0]
     if not items:
-        raise HTTPException(400, "Nothing selected")
+        raise HTTPException(400, "Ingenting valgt")
     try:
         cart = await oda.add_to_cart(
             [{"productId": i.product_id, "quantity": i.quantity} for i in items]
