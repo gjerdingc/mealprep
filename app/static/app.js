@@ -380,7 +380,7 @@ function renderRecipes() {
   }
   nodes.push(h('div', { class: 'cards-grid' }, S.recipes.map((r) => h('button', { class: 'card recipe-card', onclick: () => openRecipe(r.id) },
     h('h3', null, r.name),
-    h('div', { class: 'muted' }, [timeText(r), `${r.ingredients.length} ingredienser`, `${r.servings} porsjoner`].filter(Boolean).join(' · '))))));
+    h('div', { class: 'muted' }, [timeText(r), `${r.ingredients.filter((i) => !i.side).length} ingredienser`, `${r.servings} porsjoner`].filter(Boolean).join(' · '))))));
   view.replaceChildren(...nodes);
 }
 
@@ -392,9 +392,12 @@ function openRecipe(id) {
     h('div', { class: 'muted' }, [timeText(r), total ? `${mins(total)} totalt` : '', `${r.servings} porsjoner`].filter(Boolean).join(' · ')),
     h('div', { class: 'card' },
       h('div', { class: 'section-title', style: 'margin:0 0 6px' }, 'Ingredienser'),
-      r.ingredients.length
-        ? h('div', { class: 'list' }, r.ingredients.map((i) => h('div', { class: 'item' }, itemText(i))))
+      r.ingredients.some((i) => !i.side)
+        ? h('div', { class: 'list' }, r.ingredients.filter((i) => !i.side).map((i) => h('div', { class: 'item' }, itemText(i))))
         : h('div', { class: 'muted' }, 'Ingen ingredienser lagt inn.')),
+    r.ingredients.some((i) => i.side) && h('div', { class: 'card' },
+      h('div', { class: 'section-title', style: 'margin:0 0 6px' }, 'Tilbehør på bordet'),
+      h('div', { class: 'chips' }, r.ingredients.filter((i) => i.side).map((i) => h('span', { class: 'tag plain' }, i.name)))),
     r.instructions && h('div', { class: 'card' },
       h('div', { class: 'section-title', style: 'margin:0 0 6px' }, 'Slik gjør du'),
       h('div', { class: 'pre' }, r.instructions)),
@@ -427,14 +430,30 @@ function openRecipeForm(recipe) {
     rows.append(row);
     return row;
   };
-  r.ingredients.forEach(addRow);
-  for (let i = r.ingredients.length; i < 3; i++) addRow();
+  const mainIngredients = r.ingredients.filter((i) => !i.side);
+  mainIngredients.forEach(addRow);
+  for (let i = mainIngredients.length; i < 3; i++) addRow();
+
+  // Sides: things put on the table, with no amount.
+  const sideRows = h('div', { style: 'display:grid;gap:6px' });
+  const addSide = (value = '') => {
+    const what = suggest(h('input', { placeholder: 'F.eks. tyttebærsyltetøy', value, 'aria-label': 'Tilbehør' }),
+      () => knownList, { minChars: 1, max: 6 });
+    const row = h('div', { class: 'side-row' }, what,
+      h('button', { type: 'button', class: 'ghost', 'aria-label': 'Fjern tilbehør', onclick: () => { row.remove(); dlgDirty = true; } }, '✕'));
+    sideRows.append(row);
+    return row;
+  };
+  r.ingredients.filter((i) => i.side).forEach((i) => addSide(i.name));
 
   const save = () => run(async () => {
     const ingredients = [...rows.children].map((row) => {
       const [q, u, n] = row.querySelectorAll('input');
       return { quantity: q.value === '' ? null : Number(q.value), unit: u.value.trim(), name: n.value.trim() };
     }).filter((i) => i.name);
+    for (const input of sideRows.querySelectorAll('input')) {
+      if (input.value.trim()) ingredients.push({ name: input.value.trim(), quantity: null, unit: '', side: true });
+    }
     const body = {
       name: name.value, prep_min: Number(prep.value) || 0, cook_min: Number(cook.value) || 0,
       servings: Number(servings.value) || 4, instructions: instructions.value, ingredients,
@@ -456,6 +475,10 @@ function openRecipeForm(recipe) {
       h('p', { class: 'muted' }, 'Bruk samme navn som i basisvarene (for eksempel «Melk»), så vet handlelista at dere allerede har det. Mangler en enhet? Skriv den rett inn, så huskes den til neste gang.'),
       rows,
       h('button', { type: 'button', class: 'small', onclick: () => addRow().querySelector('.ing-name input').focus() }, '+ Legg til ingrediens'),
+      h('div', { class: 'section-title' }, 'Tilbehør på bordet'),
+      h('p', { class: 'muted' }, 'Ting dere setter fram og forsyner dere av, som tyttebærsyltetøy eller flatbrød. Uten mengde. De legges også i basisvarene, så dere kan markere dem som tomme når det må kjøpes mer.'),
+      sideRows,
+      h('button', { type: 'button', class: 'small', onclick: () => addSide().querySelector('input').focus() }, '+ Legg til tilbehør'),
       h('label', { class: 'field' }, 'Slik gjør du', instructions),
       h('div', { class: 'row' },
         h('button', { class: 'primary grow', type: 'submit' }, 'Lagre oppskrift'),
@@ -599,7 +622,7 @@ async function renderShopping() {
       h('h3', null, 'Trengs, men skal finnes hjemme'),
       h('p', { class: 'muted' }, 'Ta en rask sjekk. Trykk «Tomt» for å flytte en vare til lista.'),
       h('div', { class: 'list' }, list.have.map((i) => h('div', { class: 'item' },
-        h('div', { class: 'grow' }, h('div', { class: 'label' }, itemText(i)), h('div', { class: 'muted' }, i.recipes.join(', '))),
+        h('div', { class: 'grow' }, h('div', { class: 'label' }, itemText(i)), h('div', { class: 'muted' }, [i.side ? 'tilbehør' : '', i.recipes.join(', ')].filter(Boolean).join(' · '))),
         h('button', { class: 'small', onclick: () => run(async () => { await api('PATCH', `/pantry/${i.pantry_id}`, { in_stock: false }); await reload(); }) }, 'Tomt'))))));
   }
 

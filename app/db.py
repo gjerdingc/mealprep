@@ -30,7 +30,8 @@ CREATE TABLE IF NOT EXISTS recipe_ingredients(
     position INTEGER NOT NULL DEFAULT 0,
     name TEXT NOT NULL,
     quantity REAL,
-    unit TEXT NOT NULL DEFAULT ''
+    unit TEXT NOT NULL DEFAULT '',
+    side INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS pantry(
     id INTEGER PRIMARY KEY,
@@ -86,6 +87,9 @@ def init():
         columns = {r["name"] for r in c.execute("PRAGMA table_info(oda_products)")}
         if "image" not in columns:
             c.execute("ALTER TABLE oda_products ADD COLUMN image TEXT")
+        columns = {r["name"] for r in c.execute("PRAGMA table_info(recipe_ingredients)")}
+        if "side" not in columns:
+            c.execute("ALTER TABLE recipe_ingredients ADD COLUMN side INTEGER NOT NULL DEFAULT 0")
 
 
 def get_setting(c, key, default=None):

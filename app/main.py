@@ -115,7 +115,7 @@ def load_recipes(c):
         r["ingredients"] = []
     for i in c.execute("SELECT * FROM recipe_ingredients ORDER BY recipe_id, position, id"):
         by_id[i["recipe_id"]]["ingredients"].append(
-            {"name": i["name"], "quantity": i["quantity"], "unit": i["unit"]}
+            {"name": i["name"], "quantity": i["quantity"], "unit": i["unit"], "side": bool(i["side"])}
         )
     return recipes
 
@@ -190,8 +190,13 @@ def save_settings(body: SettingsIn):
 # ------------------------------------------------------------------------ recipes
 
 
+SIDES_CATEGORY = "Tilbehør"
+
+
 class IngredientIn(BaseModel):
     name: str
+    # A side put on the table (jam, flatbread): no amount, and kept as a pantry staple.
+    side: bool = False
     quantity: float | None = None
     unit: str = ""
 
@@ -208,15 +213,28 @@ class RecipeIn(BaseModel):
 def _write_ingredients(c, recipe_id, ingredients):
     c.execute("DELETE FROM recipe_ingredients WHERE recipe_id=?", (recipe_id,))
     rows = [
-        (recipe_id, pos, i.name.strip(), i.quantity, i.unit.strip())
+        (
+            recipe_id,
+            pos,
+            i.name.strip(),
+            None if i.side else i.quantity,
+            "" if i.side else i.unit.strip(),
+            int(i.side),
+        )
         for pos, i in enumerate(ingredients)
         if i.name.strip()
     ]
     c.executemany(
-        "INSERT INTO recipe_ingredients(recipe_id, position, name, quantity, unit) VALUES(?,?,?,?,?)",
+        "INSERT INTO recipe_ingredients(recipe_id, position, name, quantity, unit, side) "
+        "VALUES(?,?,?,?,?,?)",
         rows,
     )
     remember(c, "units", [r[4] for r in rows])
+    # Sides become pantry staples, so they can be marked as empty when more is needed.
+    sides = [(r[2], SIDES_CATEGORY) for r in rows if r[5]]
+    if sides:
+        c.executemany("INSERT OR IGNORE INTO pantry(name, category) VALUES(?, ?)", sides)
+        remember(c, "categories", [SIDES_CATEGORY])
 
 
 def _recipe_values(body: RecipeIn):
@@ -408,7 +426,8 @@ def build_shopping(c, days: int):
         if d["shopped"]:
             continue
         for ing in c.execute(
-            "SELECT name, quantity, unit FROM recipe_ingredients WHERE recipe_id=? ORDER BY position",
+            "SELECT name, quantity, unit, side FROM recipe_ingredients WHERE recipe_id=? "
+            "ORDER BY position",
             (d["recipe_id"],),
         ):
             key = f"{norm(ing['name'])}|{norm(ing['unit'])}"
@@ -421,6 +440,7 @@ def build_shopping(c, days: int):
                     "quantity": None,
                     "recipes": [],
                     "kind": "recipe",
+                    "side": bool(ing["side"]),
                 },
             )
             if ing["quantity"] is not None:

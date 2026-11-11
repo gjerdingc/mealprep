@@ -216,6 +216,9 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
   display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px 2px 12px;
   border: 1px solid var(--line); border-radius: 999px; font-weight: 600; font-size: .92rem;
 }
+.tag.plain { padding: 5px 12px; }
+.side-row { display: grid; grid-template-columns: 1fr 40px; gap: 6px; align-items: center; }
+.side-row button { padding: 0; }
 .tag-x { border: 0; background: none; color: var(--muted); min-height: 30px; padding: 0 8px; }
 
 /* Theme picker */
