@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 import os
 import sqlite3
 from datetime import date, datetime, timedelta
@@ -29,6 +30,38 @@ def today() -> date:
 
 def norm(s: str) -> str:
     return " ".join((s or "").lower().split())
+
+
+DEFAULT_LISTS = {
+    "units": ["g", "kg", "dl", "l", "ml", "ts", "ss", "stk", "pk", "boks", "fedd", "neve"],
+    "categories": [
+        "Krydder", "Bakevarer", "Kjøleskap", "Brød og korn", "Hermetikk og glass", "Fryser", "Annet",
+    ],
+}
+
+
+def get_list(c, key):
+    raw = db.get_setting(c, key)
+    return json.loads(raw) if raw else list(DEFAULT_LISTS[key])
+
+
+def clean_list(values):
+    """Trims, drops blanks and removes duplicates (ignoring case), keeping the order."""
+    out, seen = [], set()
+    for v in values:
+        v = " ".join(str(v).split())[:40]
+        if v and v.lower() not in seen:
+            seen.add(v.lower())
+            out.append(v)
+    return out
+
+
+def remember(c, key, values):
+    """Adds values the household has started using to the saved list."""
+    current = get_list(c, key)
+    merged = clean_list([*current, *values])
+    if merged != current:
+        db.set_setting(c, key, json.dumps(merged))
 
 
 # --------------------------------------------------------------------------- auth
@@ -93,7 +126,11 @@ def state():
         return {
             "today": today().isoformat(),
             "members": [dict(r) for r in c.execute("SELECT * FROM members ORDER BY id")],
-            "settings": {"dinner_time": db.get_setting(c, "dinner_time", "17:00")},
+            "settings": {
+                "dinner_time": db.get_setting(c, "dinner_time", "17:00"),
+                "units": get_list(c, "units"),
+                "categories": get_list(c, "categories"),
+            },
             "recipes": load_recipes(c),
             "pantry": [
                 dict(r)
@@ -128,17 +165,25 @@ def delete_member(member_id: int):
 
 
 class SettingsIn(BaseModel):
-    dinner_time: str
+    dinner_time: str | None = None
+    units: list[str] | None = None
+    categories: list[str] | None = None
 
 
 @app.put("/api/settings")
 def save_settings(body: SettingsIn):
-    try:
-        datetime.strptime(body.dinner_time, "%H:%M")
-    except ValueError:
-        raise HTTPException(400, "Middagstid må skrives som 17:00")
+    if body.dinner_time is not None:
+        try:
+            datetime.strptime(body.dinner_time, "%H:%M")
+        except ValueError:
+            raise HTTPException(400, "Middagstid må skrives som 17:00")
     with db.conn() as c:
-        db.set_setting(c, "dinner_time", body.dinner_time)
+        if body.dinner_time is not None:
+            db.set_setting(c, "dinner_time", body.dinner_time)
+        if body.units is not None:
+            db.set_setting(c, "units", json.dumps(clean_list(body.units)))
+        if body.categories is not None:
+            db.set_setting(c, "categories", json.dumps(clean_list(body.categories)))
     return {"ok": True}
 
 
@@ -171,6 +216,7 @@ def _write_ingredients(c, recipe_id, ingredients):
         "INSERT INTO recipe_ingredients(recipe_id, position, name, quantity, unit) VALUES(?,?,?,?,?)",
         rows,
     )
+    remember(c, "units", [r[4] for r in rows])
 
 
 def _recipe_values(body: RecipeIn):
@@ -254,6 +300,7 @@ def add_pantry(body: PantryIn):
             )
         except sqlite3.IntegrityError:
             raise HTTPException(409, f"{name} finnes allerede i basisvarene")
+        remember(c, "categories", [body.category])
     return {"ok": True}
 
 
@@ -264,6 +311,7 @@ def add_pantry_bulk(body: PantryBulkIn):
             "INSERT OR IGNORE INTO pantry(name, category) VALUES(?, ?)",
             [(i.name.strip(), i.category.strip() or "Annet") for i in body.items if i.name.strip()],
         )
+        remember(c, "categories", [i.category for i in body.items])
     return {"ok": True}
 
 

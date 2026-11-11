@@ -2,8 +2,12 @@
 
 const view = document.getElementById('view');
 const dlg = document.getElementById('dlg');
-const CATEGORIES = ['Krydder', 'Bakevarer', 'Kjøleskap', 'Brød og korn', 'Hermetikk og glass', 'Fryser', 'Annet'];
-const UNITS = ['g', 'kg', 'dl', 'l', 'ml', 'ts', 'ss', 'stk', 'pk', 'boks', 'fedd', 'neve'];
+const THEMES = [
+  ['', 'Automatisk', 'Følger telefonen eller PC-en'],
+  ['light', 'Lys', 'Rolig og lys'],
+  ['dark', 'Mørk', 'Behagelig om kvelden'],
+  ['sun', 'Solskinn', 'Varm og fargerik'],
+];
 const COMMON_STAPLES = [
   ['Salt', 'Krydder'], ['Pepper', 'Krydder'], ['Paprikapulver', 'Krydder'], ['Spisskummen', 'Krydder'],
   ['Oregano', 'Krydder'], ['Kanel', 'Krydder'], ['Hvitløkspulver', 'Krydder'],
@@ -18,6 +22,7 @@ let S = null;          // household state from /api/state
 let weekStart = null;  // Monday of the week on screen
 let weekPlan = {};     // date -> plan entry for the week on screen
 let shopDays = 7;
+let pantryCategory = 'Annet';  // last category used when adding a staple
 
 // ------------------------------------------------------------------ helpers
 
@@ -100,15 +105,87 @@ const qtyText = (q) => (q == null ? '' : String(Math.round(q * 100) / 100));
 const itemText = (i) => [qtyText(i.quantity), i.unit, i.name].filter(Boolean).join(' ');
 const memberName = (id) => (S.members.find((m) => m.id === id) || {}).name;
 
-function openDialog(title, nodes) {
+// A "form" dialog holds something the user is writing: a click outside it does
+// nothing, and closing it with unsaved text asks first.
+let dlgIsForm = false;
+let dlgDirty = false;
+
+function openDialog(title, nodes, { form = false } = {}) {
+  dlgIsForm = form;
+  dlgDirty = false;
   document.getElementById('dlg-title').textContent = title;
   document.getElementById('dlg-body').replaceChildren(...[nodes].flat());
   if (!dlg.open) dlg.showModal();
   dlg.scrollTop = 0;
 }
 function closeDialog() { if (dlg.open) dlg.close(); }
-document.getElementById('dlg-close').addEventListener('click', closeDialog);
-dlg.addEventListener('click', (e) => { if (e.target === dlg) closeDialog(); });
+function askToClose() {
+  if (dlgIsForm && dlgDirty && !confirm('Lukke uten å lagre? Det du har skrevet blir borte.')) return;
+  closeDialog();
+}
+document.getElementById('dlg-close').addEventListener('click', askToClose);
+document.getElementById('dlg-body').addEventListener('input', () => { dlgDirty = true; });
+dlg.addEventListener('cancel', (e) => { e.preventDefault(); askToClose(); });  // Esc key
+dlg.addEventListener('mousedown', (e) => { dlg.dataset.downOutside = e.target === dlg ? '1' : ''; });
+dlg.addEventListener('click', (e) => {
+  if (e.target === dlg && dlg.dataset.downOutside && !dlgIsForm) closeDialog();
+});
+window.addEventListener('beforeunload', (e) => {
+  if (dlg.open && dlgIsForm && dlgDirty) e.preventDefault();
+});
+
+/**
+ * Suggestions under a text field. Nothing is shown until `minChars` characters are
+ * typed, and only the best `max` matches are listed. Typing something new is fine.
+ */
+function suggest(input, options, { minChars = 1, max = 6 } = {}) {
+  const list = h('div', { class: 'ac-list', hidden: true });
+  const wrap = h('div', { class: 'ac' }, input, list);
+  let active = -1;
+  const hide = () => { list.hidden = true; active = -1; };
+  const pick = (value) => {
+    input.value = value;
+    hide();
+    input.dispatchEvent(new Event('change', { bubbles: true }));
+    dlgDirty = true;
+  };
+  const show = () => {
+    const q = input.value.trim().toLowerCase();
+    if (q.length < minChars) return hide();
+    const all = options();
+    const matches = [
+      ...all.filter((o) => o.toLowerCase().startsWith(q)),
+      ...all.filter((o) => !o.toLowerCase().startsWith(q) && o.toLowerCase().includes(q)),
+    ].filter((o) => o.toLowerCase() !== q).slice(0, max);
+    if (!matches.length) return hide();
+    active = -1;
+    list.replaceChildren(...matches.map((o) => h('div', {
+      class: 'ac-item',
+      onpointerdown: (e) => { e.preventDefault(); pick(o); },
+    }, o)));
+    list.hidden = false;
+  };
+  input.autocomplete = 'off';
+  input.addEventListener('input', show);
+  input.addEventListener('focus', show);
+  input.addEventListener('blur', hide);
+  input.addEventListener('keydown', (e) => {
+    if (list.hidden) return;
+    const items = [...list.children];
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      active = (active + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length;
+      items.forEach((el, i) => el.classList.toggle('active', i === active));
+    } else if (e.key === 'Enter' && active >= 0) {
+      e.preventDefault();
+      pick(items[active].textContent);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      hide();
+    }
+  });
+  return wrap;
+}
 
 // ------------------------------------------------------------------ routing
 
@@ -329,6 +406,7 @@ function openRecipeForm(recipe) {
   const r = recipe || { name: '', prep_min: '', cook_min: '', servings: 4, instructions: '', ingredients: [] };
   const known = new Set(S.pantry.map((p) => p.name));
   for (const x of S.recipes) for (const i of x.ingredients) known.add(i.name);
+  const knownList = [...known].sort((a, b) => a.localeCompare(b, 'nb'));
 
   const name = h('input', { value: r.name, placeholder: 'Taco, fiskesuppe, pannekaker …', required: true });
   const prep = h('input', { type: 'number', min: 0, inputMode: 'numeric', value: r.prep_min });
@@ -337,11 +415,15 @@ function openRecipeForm(recipe) {
   const instructions = h('textarea', { value: r.instructions, placeholder: 'Fremgangsmåte, tips, ovnstemperatur …' });
   const rows = h('div', { style: 'display:grid;gap:6px' });
   const addRow = (ing = {}) => {
-    const row = h('div', { class: 'ing-row' },
-      h('input', { type: 'number', min: 0, step: 'any', inputMode: 'decimal', placeholder: 'Antall', value: ing.quantity ?? '', 'aria-label': 'Mengde' }),
-      h('input', { placeholder: 'Enhet', value: ing.unit || '', list: 'units', 'aria-label': 'Enhet' }),
-      h('input', { placeholder: 'Ingrediens', value: ing.name || '', list: 'ingredient-names', 'aria-label': 'Ingrediens' }),
-      h('button', { type: 'button', class: 'ghost', 'aria-label': 'Fjern ingrediens', onclick: () => row.remove() }, '✕'));
+    const qty = h('input', { class: 'ing-qty', type: 'number', min: 0, step: 'any', inputMode: 'decimal', placeholder: 'Mengde', value: ing.quantity ?? '', 'aria-label': 'Mengde' });
+    const unit = suggest(h('input', { placeholder: 'Enhet', value: ing.unit || '', 'aria-label': 'Enhet', autocapitalize: 'off' }),
+      () => S.settings.units, { minChars: 0, max: 40 });
+    unit.classList.add('ing-unit');
+    const what = suggest(h('input', { placeholder: 'Ingrediens', value: ing.name || '', 'aria-label': 'Ingrediens' }),
+      () => knownList, { minChars: 1, max: 6 });
+    what.classList.add('ing-name');
+    const row = h('div', { class: 'ing-row' }, qty, unit, what,
+      h('button', { type: 'button', class: 'ghost ing-del', 'aria-label': 'Fjern ingrediens', onclick: () => { row.remove(); dlgDirty = true; } }, '✕'));
     rows.append(row);
     return row;
   };
@@ -364,8 +446,6 @@ function openRecipeForm(recipe) {
   });
 
   openDialog(recipe ? 'Endre oppskrift' : 'Ny oppskrift', [
-    h('datalist', { id: 'units' }, UNITS.map((u) => h('option', { value: u }))),
-    h('datalist', { id: 'ingredient-names' }, [...known].sort().map((n) => h('option', { value: n }))),
     h('form', { style: 'display:grid;gap:12px', onsubmit: (e) => { e.preventDefault(); save(); } },
       h('label', { class: 'field' }, 'Navn', name),
       h('div', { class: 'grid3' },
@@ -373,9 +453,9 @@ function openRecipeForm(recipe) {
         h('label', { class: 'field' }, 'Tilberedning (min)', cook),
         h('label', { class: 'field' }, 'Porsjoner', servings)),
       h('div', { class: 'section-title' }, 'Ingredienser'),
-      h('p', { class: 'muted' }, 'Bruk samme navn som i basisvarene (for eksempel «Melk»), så vet handlelista at dere allerede har det.'),
+      h('p', { class: 'muted' }, 'Bruk samme navn som i basisvarene (for eksempel «Melk»), så vet handlelista at dere allerede har det. Mangler en enhet? Skriv den rett inn, så huskes den til neste gang.'),
       rows,
-      h('button', { type: 'button', class: 'small', onclick: () => addRow().querySelector('input').focus() }, '+ Legg til ingrediens'),
+      h('button', { type: 'button', class: 'small', onclick: () => addRow().querySelector('.ing-name input').focus() }, '+ Legg til ingrediens'),
       h('label', { class: 'field' }, 'Slik gjør du', instructions),
       h('div', { class: 'row' },
         h('button', { class: 'primary grow', type: 'submit' }, 'Lagre oppskrift'),
@@ -386,7 +466,7 @@ function openRecipeForm(recipe) {
             run(async () => { await api('DELETE', `/recipes/${recipe.id}`); closeDialog(); await reload(); });
           },
         }, 'Slett'))),
-  ]);
+  ], { form: true });
   if (!recipe) name.focus();
 }
 
@@ -394,17 +474,37 @@ function openRecipeForm(recipe) {
 
 function renderPantry() {
   const name = h('input', { placeholder: 'Legg til en basisvare, f.eks. soyasaus' });
-  const category = h('select', null, CATEGORIES.map((c) => h('option', { value: c }, c)));
-  category.value = 'Annet';
+  const NEW = '__new__';
+  const category = h('select', { 'aria-label': 'Kategori' });
+  const fillCategories = (selected) => {
+    category.replaceChildren(
+      ...S.settings.categories.map((c) => h('option', { value: c }, c)),
+      h('option', { value: NEW }, '+ Ny kategori …'));
+    category.value = S.settings.categories.includes(selected) ? selected : (S.settings.categories[0] || NEW);
+  };
+  fillCategories(pantryCategory);
+  category.addEventListener('change', () => {
+    if (category.value !== NEW) { pantryCategory = category.value; return; }
+    const wanted = (prompt('Hva skal den nye kategorien hete?') || '').trim();
+    if (!wanted) return fillCategories(pantryCategory);
+    run(async () => {
+      await api('PUT', '/settings', { categories: [...S.settings.categories, wanted] });
+      await refresh();
+      pantryCategory = S.settings.categories.find((c) => c.toLowerCase() === wanted.toLowerCase()) || pantryCategory;
+      fillCategories(pantryCategory);
+    });
+  });
   const nodes = [
     h('form', {
       class: 'card', style: 'display:grid;gap:8px',
       onsubmit: (e) => {
         e.preventDefault();
+        if (category.value === NEW) return toast('Velg en kategori først');
         run(async () => { await api('POST', '/pantry', { name: name.value, category: category.value }); await reload(); });
       },
-    }, h('div', { class: 'row' }, h('div', { class: 'grow' }, name), h('div', { style: 'width:150px' }, category)),
-       h('button', { class: 'primary', type: 'submit' }, 'Legg til')),
+    }, name,
+       h('div', { class: 'row' }, h('div', { class: 'grow' }, category),
+         h('button', { class: 'primary', type: 'submit' }, 'Legg til'))),
   ];
 
   if (!S.pantry.length) {
@@ -434,7 +534,7 @@ function renderPantry() {
       h('div', { class: 'row' }, h('span', { class: 'badge out' }, `Tomt: ${out.length}`), h('span', { class: 'muted' }, 'Står på handlelista')),
       h('div', { class: 'list' }, out.map(row))));
   }
-  const groups = [...new Set([...CATEGORIES, ...S.pantry.map((p) => p.category)])];
+  const groups = [...new Set([...S.settings.categories, ...S.pantry.map((p) => p.category)])];
   for (const g of groups) {
     const items = S.pantry.filter((p) => p.category === g && p.in_stock);
     if (!items.length) continue;
@@ -619,6 +719,39 @@ async function openOda(list) {
 
 // ----------------------------------------------------------------- settings
 
+/** A card for editing one of the household's own lists (units, categories). */
+function listEditor(title, hint, key, placeholder) {
+  const values = S.settings[key];
+  const input = h('input', { placeholder, autocapitalize: 'off' });
+  const save = (next) => run(async () => { await api('PUT', '/settings', { [key]: next }); await reload(); openSettings(); });
+  return h('div', { class: 'card', style: 'display:grid;gap:8px' },
+    h('h3', null, title),
+    h('p', { class: 'muted' }, hint),
+    h('div', { class: 'chips' }, values.map((v) => h('span', { class: 'tag' }, v,
+      h('button', { class: 'tag-x', 'aria-label': `Fjern ${v}`, onclick: () => save(values.filter((x) => x !== v)) }, '✕')))),
+    h('form', {
+      class: 'row',
+      onsubmit: (e) => { e.preventDefault(); if (input.value.trim()) save([...values, input.value]); },
+    }, h('div', { class: 'grow' }, input), h('button', { type: 'submit' }, 'Legg til')));
+}
+
+function applyTheme(theme) {
+  if (theme) document.documentElement.dataset.theme = theme;
+  else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem('theme', theme); } catch { /* private mode */ }
+}
+
+function openThemes() {
+  const current = document.documentElement.dataset.theme || '';
+  openDialog('Velg tema', THEMES.map(([id, label, text]) => h('button', {
+    class: `theme-choice${id === current ? ' on' : ''}`,
+    onclick: () => { applyTheme(id); closeDialog(); },
+  }, h('span', { class: `swatch swatch-${id || 'auto'}` }),
+     h('span', { class: 'grow' }, h('strong', null, label), h('span', { class: 'muted', style: 'display:block' }, text)),
+     id === current ? '✓' : null)));
+}
+document.getElementById('theme-btn').addEventListener('click', openThemes);
+
 function openSettings() {
   const name = h('input', { placeholder: 'Navn' });
   const time = h('input', {
@@ -643,6 +776,8 @@ function openSettings() {
     h('div', { class: 'card' },
       h('label', { class: 'field' }, 'Vi spiser middag klokka', time),
       h('p', { class: 'muted', style: 'margin-top:6px' }, 'Brukes til å vise når matlagingen må starte.')),
+    listEditor('Enheter', 'Vises som forslag når dere skriver inn ingredienser.', 'units', 'Ny enhet, f.eks. klype'),
+    listEditor('Kategorier for basisvarer', 'Varer som allerede ligger i en kategori dere fjerner, blir liggende der.', 'categories', 'Ny kategori, f.eks. Drikke'),
     h('div', { class: 'card', style: 'display:grid;gap:8px' },
       h('h3', null, 'Oda'),
       S.oda_connected
