@@ -109,12 +109,14 @@ async def _ask(system, prompt, output, effort):
 
 async def _to_english(query):
     out = await _ask(
-        "You turn a dish search typed by a Norwegian user into a short English search term "
-        "for an English recipe database. Keep dish names that are already international "
-        "as they are (adobo, lasagna, pad thai, tikka masala). For Norwegian dishes with no "
-        "English name, describe the dish in two or three words the way an English recipe "
-        "title would (lapskaus: beef potato stew; fiskesuppe: fish soup; kjøttkaker: "
-        "meatballs gravy). Reply with the search term only.",
+        "You turn a dish search into a short English search term for an English recipe "
+        "database. The user writes in Norwegian, but often types dish names from other "
+        "cuisines (bistek, adobo, sinigang, pad thai, tikka masala, bibimbap). Those are "
+        "names, not Norwegian words: return them unchanged. Translate only Norwegian words "
+        "(kyllingsuppe: chicken soup; fiskegrateng: fish gratin). For a Norwegian dish with "
+        "no English name, describe it the way an English recipe title would (lapskaus: beef "
+        "potato stew). Never add a country, cuisine or other words the user did not type or "
+        "imply. When unsure, return the text unchanged. Reply with the search term only.",
         query,
         _Query,
         "low",
@@ -135,20 +137,27 @@ async def search(query):
     english = await _to_english(query)
     base = {"number": 12, "addRecipeInformation": "true"}
     # The free-text search reads some words as ingredients ("adobo" becomes the adobo
-    # seasoning) and then finds nothing, so fall back to searching the titles.
+    # seasoning) and then finds nothing, so fall back to searching the titles. If the
+    # translation still finds nothing, try exactly what the user typed.
+    terms = [english] + ([query] if query.lower() != english.lower() else [])
     attempts = [
-        {"query": english, "instructionsRequired": "true"},
-        {"titleMatch": english, "instructionsRequired": "true"},
-        {"titleMatch": english},
+        (term, params)
+        for term in terms
+        for params in (
+            {"query": term, "instructionsRequired": "true"},
+            {"titleMatch": term, "instructionsRequired": "true"},
+            {"titleMatch": term},
+        )
     ]
-    results = []
-    for params in attempts:
+    results, used = [], english
+    for term, params in attempts:
         data = await _spoonacular("/recipes/complexSearch", {**base, **params})
         results = data.get("results") or []
         if results:
+            used = term
             break
     return {
-        "query": english,
+        "query": used,
         "results": [
             {
                 "id": r.get("id"),
