@@ -123,6 +123,7 @@ def state():
             "members": [dict(r) for r in c.execute("SELECT * FROM members ORDER BY id")],
             "settings": {
                 "dinner_time": db.get_setting(c, "dinner_time", "17:00"),
+                "gcal_color": db.get_setting(c, "gcal_color", ""),
                 "units": get_list(c, "units"),
                 "categories": get_list(c, "categories"),
             },
@@ -224,6 +225,8 @@ class SettingsIn(BaseModel):
     dinner_time: str | None = None
     units: list[str] | None = None
     categories: list[str] | None = None
+    # Google Calendar colorId "1"-"11", or "" for the calendar's own colour.
+    gcal_color: str | None = None
 
 
 @app.put("/api/settings")
@@ -233,16 +236,23 @@ def save_settings(body: SettingsIn):
             datetime.strptime(body.dinner_time, "%H:%M")
         except ValueError:
             raise HTTPException(400, "Middagstid må skrives som 17:00")
+    if body.gcal_color not in (None, "") and body.gcal_color not in gcal.COLORS:
+        raise HTTPException(400, "Ukjent farge")
     with db.conn() as c:
         old_time = db.get_setting(c, "dinner_time", "17:00")
+        old_color = db.get_setting(c, "gcal_color", "")
         if body.dinner_time is not None:
             db.set_setting(c, "dinner_time", body.dinner_time)
         if body.units is not None:
             db.set_setting(c, "units", json.dumps(clean_list(body.units)))
         if body.categories is not None:
             db.set_setting(c, "categories", json.dumps(clean_list(body.categories)))
-    if body.dinner_time is not None and body.dinner_time != old_time:
-        gcal.sync_upcoming()  # every event's times follow the dinner time
+        if body.gcal_color is not None:
+            db.set_setting(c, "gcal_color", body.gcal_color)
+    if (body.dinner_time is not None and body.dinner_time != old_time) or (
+        body.gcal_color is not None and body.gcal_color != old_color
+    ):
+        return {"ok": True, "gcal_error": gcal.sync_upcoming()}  # every coming event follows
     return {"ok": True}
 
 

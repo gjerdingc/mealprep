@@ -28,6 +28,8 @@ SCOPE = "https://www.googleapis.com/auth/calendar.events"
 TIMEOUT = 10
 # A dish with no times on the recipe still gets an event of this length before dinner.
 DEFAULT_MINUTES = 30
+# Google Calendar's fixed event colours, by colorId.
+COLORS = {str(i) for i in range(1, 12)}
 
 
 class GcalError(Exception):
@@ -192,7 +194,7 @@ def status(c):
 # ------------------------------------------------------------------------ sync
 
 
-def _event_body(row, dinner_time):
+def _event_body(row, dinner_time, color=None):
     """The event wanted for a plan day, or None if the day should have no event."""
     title = row["recipe_name"] or row["note"]
     if not title:
@@ -209,13 +211,16 @@ def _event_body(row, dinner_time):
     if row["cook_name"]:
         description.append(f"{row['cook_name']} lager mat. Middag kl. {dinner_time}.")
     description.append("Lagt inn av Middagsplan.")
-    return {
+    body = {
         "summary": f"🍽 {title}",
         "description": "\n".join(description),
         "start": {"dateTime": start.strftime("%Y-%m-%dT%H:%M:00"), "timeZone": tz},
         "end": {"dateTime": end.strftime("%Y-%m-%dT%H:%M:00"), "timeZone": tz},
         "transparency": "transparent",
     }
+    if color:  # left out, the event takes the calendar's own colour
+        body["colorId"] = color
+    return body
 
 
 def _flush_deletes(c):
@@ -258,6 +263,7 @@ def sync_days(days):
         first_error = _flush_deletes(c)
         today = db.today().isoformat()
         dinner_time = db.get_setting(c, "dinner_time", "17:00")
+        color = db.get_setting(c, "gcal_color") or None
         for day in sorted(set(days)):
             if day < today:
                 continue
@@ -270,17 +276,17 @@ def sync_days(days):
             ).fetchone()
             if not row:
                 continue
-            error = _sync_row(c, row, dinner_time)
+            error = _sync_row(c, row, dinner_time, color)
             c.execute("UPDATE plan SET gcal_error=? WHERE date=?", (error, day))
             c.commit()
             first_error = first_error or error
         return first_error
 
 
-def _sync_row(c, row, dinner_time):
+def _sync_row(c, row, dinner_time, color):
     day = row["date"]
     calendar = row["cook_calendar"] or None
-    body = _event_body(row, dinner_time) if calendar else None
+    body = _event_body(row, dinner_time, color) if calendar else None
     event_id, event_calendar = row["gcal_event_id"], row["gcal_calendar_id"]
     try:
         # Wrong calendar (cook changed) or no event wanted: remove the old one first.

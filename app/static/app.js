@@ -917,6 +917,31 @@ function openThemes() {
 }
 document.getElementById('theme-btn').addEventListener('click', openThemes);
 
+// Google Calendar's fixed event colours (colorId -> name, colour as Google shows it).
+const GCAL_COLORS = [
+  ['1', 'Lavendel', '#7986cb'], ['2', 'Salvie', '#33b679'], ['3', 'Drue', '#8e24aa'],
+  ['4', 'Flamingo', '#e67c73'], ['5', 'Banan', '#f6bf26'], ['6', 'Mandarin', '#f4511e'],
+  ['7', 'Påfugl', '#039be5'], ['8', 'Grafitt', '#616161'], ['9', 'Blåbær', '#3f51b5'],
+  ['10', 'Basilikum', '#0b8043'], ['11', 'Tomat', '#d50000'],
+];
+
+function colorPicker(refreshSettings) {
+  const current = S.settings.gcal_color || '';
+  const pick = (id) => run(async () => {
+    const res = await api('PUT', '/settings', { gcal_color: id });
+    await refreshSettings();
+    if (res.gcal_error) toast(`Noe ble ikke oppdatert i kalenderen: ${res.gcal_error}`);
+  });
+  const choice = (id, name, color) => h('button', {
+    class: `color-choice${id === current ? ' on' : ''}`, title: name, 'aria-label': name,
+    'aria-pressed': String(id === current), onclick: () => id !== current && pick(id),
+  }, color ? h('span', { class: 'color-dot', style: `background:${color}` }) : null, id ? null : name);
+  return h('div', { style: 'display:grid;gap:6px' },
+    h('div', null, 'Farge på middagene: ',
+      h('strong', null, (GCAL_COLORS.find(([id]) => id === current) || [, 'kalenderens egen'])[1])),
+    h('div', { class: 'chips' }, choice('', 'Kalenderens egen'), GCAL_COLORS.map(([id, name, color]) => choice(id, name, color))));
+}
+
 /** Google Calendar: which calendar each cook's dinners go to, and the on/off switch. */
 function calendarCard() {
   const g = S.gcal;
@@ -961,6 +986,7 @@ function calendarCard() {
         }),
       }),
       h('span', { class: 'grow' }, 'Legg middagene inn i Google Kalender')),
+    g.enabled && colorPicker(refreshSettings),
     g.enabled && (g.errors || g.pending_deletes)
       ? h('p', { class: 'gcal-error' },
           [g.errors && `${g.errors} middag(er) er ikke oppdatert i kalenderen.`,
