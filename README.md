@@ -10,6 +10,8 @@ an Oda cart. The interface is in Norwegian (bokmål).
   top with the time cooking has to start. The dice picks a recipe you haven't had
   for a while.
 - **Oppskrifter** (recipes): name, prep and cooking time, ingredients with amounts, instructions.
+  "Slik gjør du" understands simple Markdown (headings, numbered and bullet lists, bold,
+  italic, `> ` tips and links), so recipes can be pasted straight in. Plain text works as before.
 - **Basisvarer** (pantry staples): staples you normally always have. Tap "Tomt" and the item lands on
   the shopping list.
 - **Handleliste** (shopping list): the ingredients for the coming days' dinners, added up across

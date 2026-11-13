@@ -398,6 +398,85 @@ function renderRecipes() {
   view.replaceChildren(...nodes);
 }
 
+// ------------------------------------------------------------- markdown
+
+/** Inline Markdown: **bold**, *italic*, `code`, [links](https://…) and bare https:// links.
+ *  Builds elements from text only, so pasted text can never run as HTML. */
+function mdInline(text) {
+  const out = [];
+  const re = /(\*\*|__)(.+?)\1|(\*|_)(?!\s)(.+?)\3(?![\p{L}\d])|`([^`]+)`|\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)|(https?:\/\/[^\s<>()]+[^\s<>().,;:!?'"])/gu;
+  let last = 0, m;
+  while ((m = re.exec(text))) {
+    if (m.index > last) out.push(text.slice(last, m.index));
+    if (m[2] != null) out.push(h('strong', null, mdInline(m[2])));
+    else if (m[4] != null) out.push(h('em', null, mdInline(m[4])));
+    else if (m[5] != null) out.push(h('code', null, m[5]));
+    else {
+      const href = m[7] || m[8];
+      out.push(h('a', { href, target: '_blank', rel: 'noopener noreferrer' }, m[6] || href));
+    }
+    last = re.lastIndex;
+  }
+  if (last < text.length) out.push(text.slice(last));
+  return out;
+}
+
+/** Block Markdown for recipe instructions: headings, numbered and bullet lists,
+ *  quotes (shown as tips), rules and paragraphs. Single line breaks are kept. */
+function renderMarkdown(src) {
+  const lines = src.replace(/\r\n?/g, '\n').split('\n');
+  const blocks = [];
+  let para = null, list = null, quote = null;
+  const close = () => { para = null; list = null; quote = null; };
+  const withBreaks = (target, text) => {
+    if (target.childNodes.length) target.append(h('br'));
+    target.append(...mdInline(text));
+  };
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    let m;
+    if (!line.trim()) { close(); continue; }
+    if ((m = line.match(/^\s{0,3}(#{1,6})\s+(.*?)\s*#*$/))) {
+      close();
+      blocks.push(h(m[1].length <= 2 ? 'h3' : 'h4', { class: 'md-h' }, mdInline(m[2])));
+    } else if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(line)) {
+      close();
+      blocks.push(h('hr'));
+    } else if ((m = line.match(/^\s*(\d+)[.)]\s+(.*)$/))) {
+      if (!list || list.tagName !== 'OL') {
+        close();
+        list = h('ol', { start: Number(m[1]) });
+        blocks.push(list);
+      }
+      list.append(h('li', null, mdInline(m[2])));
+    } else if ((m = line.match(/^\s*[-*+•]\s+(?:\[[ xX]\]\s+)?(.*)$/))) {
+      if (!list || list.tagName !== 'UL') {
+        close();
+        list = h('ul');
+        blocks.push(list);
+      }
+      list.append(h('li', null, mdInline(m[1])));
+    } else if ((m = line.match(/^\s*>\s?(.*)$/))) {
+      if (!quote) {
+        close();
+        quote = h('blockquote');
+        blocks.push(quote);
+      }
+      withBreaks(quote, m[1]);
+    } else if (list && /^\s{2,}\S/.test(raw)) {
+      withBreaks(list.lastElementChild, line.trim());  // continuation of a list item
+    } else {
+      if (!para) {
+        close();
+        para = h('p');
+        blocks.push(para);
+      }
+      withBreaks(para, line.trim());
+    }
+  }
+  return h('div', { class: 'md' }, blocks);
+}
+
 function openRecipe(id) {
   const r = S.recipes.find((x) => x.id === id);
   if (!r) return;
@@ -414,7 +493,7 @@ function openRecipe(id) {
       h('div', { class: 'chips' }, r.ingredients.filter((i) => i.side).map((i) => h('span', { class: 'tag plain' }, i.name)))),
     r.instructions && h('div', { class: 'card' },
       h('div', { class: 'section-title', style: 'margin:0 0 6px' }, 'Slik gjør du'),
-      h('div', { class: 'pre' }, r.instructions)),
+      renderMarkdown(r.instructions)),
     h('button', { onclick: () => openRecipeForm(r) }, 'Endre oppskrift'),
   ]);
 }
@@ -429,7 +508,10 @@ function openRecipeForm(recipe) {
   const prep = h('input', { type: 'number', min: 0, inputMode: 'numeric', value: r.prep_min });
   const cook = h('input', { type: 'number', min: 0, inputMode: 'numeric', value: r.cook_min });
   const servings = h('input', { type: 'number', min: 1, inputMode: 'numeric', value: r.servings });
-  const instructions = h('textarea', { value: r.instructions, placeholder: 'Fremgangsmåte, tips, ovnstemperatur …' });
+  const instructions = h('textarea', {
+    value: r.instructions, rows: 10,
+    placeholder: '1. Forvarm ovnen til 200 °C.\n2. …\n\n**Tips:** Kan lages dagen før.',
+  });
   const rows = h('div', { style: 'display:grid;gap:6px' });
   const addRow = (ing = {}) => {
     const qty = h('input', { class: 'ing-qty', type: 'number', min: 0, step: 'any', inputMode: 'decimal', placeholder: 'Mengde', value: ing.quantity ?? '', 'aria-label': 'Mengde' });
@@ -511,7 +593,8 @@ function openRecipeForm(recipe) {
       h('p', { class: 'muted' }, 'Ting dere setter fram og forsyner dere av, som tyttebærsyltetøy eller flatbrød. Uten mengde. De legges også i basisvarene, så dere kan markere dem som tomme når det må kjøpes mer.'),
       sideRows,
       h('button', { type: 'button', class: 'small', onclick: () => addSide().querySelector('input').focus() }, '+ Legg til tilbehør'),
-      h('label', { class: 'field' }, 'Slik gjør du', instructions),
+      h('label', { class: 'field' }, 'Slik gjør du', instructions,
+        h('span', { class: 'muted' }, 'Markdown virker: # overskrift, 1. steg, - punkt, **fet**, *kursiv*, > tips, lenker.')),
       h('div', { class: 'row' },
         h('button', { class: 'primary grow', type: 'submit' }, 'Lagre oppskrift'),
         recipe && h('button', {
