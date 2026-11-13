@@ -1070,14 +1070,26 @@ function saveColor(path, body, refreshSettings) {
   });
 }
 
-/** Google Calendar: which calendar each cook's dinners go to, and the on/off switch. */
+// Whether the Google Calendar card is expanded. Kept here because Innstillinger is drawn
+// again after every save, which would otherwise close it.
+let calendarOpen = false;
+
+/** Google Calendar: which calendar each cook's dinners go to, and the on/off switch.
+ * Collapsed until opened; the heading shows whether it is on and if anything failed. */
 function calendarCard() {
   const g = S.gcal;
-  const card = h('div', { class: 'card', style: 'display:grid;gap:8px' }, h('h3', null, 'Google Kalender'));
+  const status = !g.configured ? 'ikke satt opp'
+    : !g.enabled ? 'av'
+    : g.errors || g.pending_deletes ? '⚠ på, noe er ikke oppdatert' : 'på';
+  const card = h('div', { style: 'display:grid;gap:8px;margin-top:8px' });
+  const box = h('details', {
+    class: 'card settings-section', open: calendarOpen,
+    ontoggle: (e) => { calendarOpen = e.target.open; },
+  }, h('summary', null, h('h3', null, 'Google Kalender'), h('span', { class: 'muted' }, status)), card);
   if (!g.configured) {
     card.append(h('p', { class: 'muted' },
       'Ikke satt opp. Serveren trenger nøkkelen til en Google-tjenestekonto (GOOGLE_SERVICE_ACCOUNT_JSON).'));
-    return card;
+    return box;
   }
   const refreshSettings = async () => { await reload(); openSettings(); };
   card.append(...[
@@ -1131,7 +1143,7 @@ function calendarCard() {
       : null,
     g.enabled && h('button', { onclick: () => retryCalendar(null).then(() => openSettings()) }, 'Synk alle kommende middager'),
   ].filter(Boolean));
-  return card;
+  return box;
 }
 
 function openSettings() {
