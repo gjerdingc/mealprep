@@ -91,7 +91,7 @@ def _access_token():
                 "iat": now,
                 "exp": now + 3600,
             },
-        )
+        ).decode()  # bytes; httpx would otherwise send them as "b'...'"
         try:
             res = httpx.post(
                 token_uri,
