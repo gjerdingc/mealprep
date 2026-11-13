@@ -127,48 +127,55 @@ async def _to_english(query):
 # ---------------------------------------------------------------------- public
 
 
+async def _complex_search(params):
+    data = await _spoonacular(
+        "/recipes/complexSearch", {"number": 12, "addRecipeInformation": "true", **params}
+    )
+    return [
+        {
+            "id": r.get("id"),
+            "title": r.get("title") or "",
+            "image": r.get("image"),
+            "minutes": r.get("readyInMinutes"),
+            "servings": r.get("servings"),
+        }
+        for r in data.get("results") or []
+    ]
+
+
+async def _site_search(term):
+    """The search on spoonacular.com. It covers recipes the recipe search misses."""
+    data = await _spoonacular("/food/search", {"query": term, "number": 12})
+    for group in data.get("searchResults") or []:
+        if group.get("name") == "Recipes":
+            return [
+                {"id": r["id"], "title": r.get("name") or "", "image": r.get("image"), "minutes": None, "servings": None}
+                for r in group.get("results") or []
+                if isinstance(r.get("id"), int)
+            ]
+    return []
+
+
 async def search(query):
     """Finds recipes for a dish name in Norwegian or English.
-    Returns {query: the English search term, results: [{id, title, image, minutes, servings}]}."""
+    Returns {query: the search term that found them, results: [{id, title, image, minutes, servings}]}."""
     _check_configured()
     query = query.strip()
     if not query:
-        return []
+        return {"query": "", "results": []}
     english = await _to_english(query)
-    base = {"number": 12, "addRecipeInformation": "true"}
-    # The free-text search reads some words as ingredients ("adobo" becomes the adobo
-    # seasoning) and then finds nothing, so fall back to searching the titles. If the
-    # translation still finds nothing, try exactly what the user typed.
     terms = [english] + ([query] if query.lower() != english.lower() else [])
-    attempts = [
-        (term, params)
-        for term in terms
-        for params in (
-            {"query": term, "instructionsRequired": "true"},
-            {"titleMatch": term, "instructionsRequired": "true"},
-            {"titleMatch": term},
-        )
-    ]
-    results, used = [], english
-    for term, params in attempts:
-        data = await _spoonacular("/recipes/complexSearch", {**base, **params})
-        results = data.get("results") or []
+    # Cheapest first. The recipe search reads some words as ingredients ("adobo" becomes
+    # the seasoning) and finds nothing, so then search the titles. Some recipes (bistek)
+    # are only found by the site's own search, which costs a few more points.
+    attempts = [(t, _complex_search, {"query": t, "instructionsRequired": "true"}) for t in terms]
+    attempts += [(t, _complex_search, {"titleMatch": t}) for t in terms]
+    attempts += [(t, _site_search, t) for t in reversed(terms)]  # what the user typed first
+    for term, fn, arg in attempts:
+        results = await fn(arg)
         if results:
-            used = term
-            break
-    return {
-        "query": used,
-        "results": [
-            {
-                "id": r.get("id"),
-                "title": r.get("title") or "",
-                "image": r.get("image"),
-                "minutes": r.get("readyInMinutes"),
-                "servings": r.get("servings"),
-            }
-            for r in results
-        ],
-    }
+            return {"query": term, "results": results}
+    return {"query": query, "results": []}
 
 
 def _number(x):
