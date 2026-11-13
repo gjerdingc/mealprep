@@ -104,7 +104,17 @@ def _access_token():
         except httpx.HTTPError:
             raise GcalError("Fikk ikke kontakt med Google")
         if res.status_code != 200:
-            raise GcalError("Google godtok ikke nøkkelen til tjenestekontoen")
+            try:
+                err = res.json()
+                reason = ": ".join(filter(None, [err.get("error"), err.get("error_description")]))
+                reason = reason or res.text
+            except ValueError:
+                reason = res.text
+            # A wrong server clock is a common cause: Google only accepts tokens issued "now".
+            raise GcalError(
+                f"Google godtok ikke nøkkelen til tjenestekontoen ({str(reason)[:200]}). "
+                f"Serverens klokke: {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}"
+            )
         body = res.json()
         _token["value"] = body["access_token"]
         _token["expires"] = time.time() + int(body.get("expires_in", 3600))
