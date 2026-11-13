@@ -549,19 +549,24 @@ def build_shopping(c, days: int):
                     "name": ing["name"],
                     "unit": ing["unit"],
                     "quantity": None,
+                    # One amount per dinner, never added up: two dishes needing 400 g each
+                    # should become two 400 g packs, not one 800 g pack.
+                    "amounts": [],
                     "recipes": [],
                     "kind": "recipe",
                     "side": bool(ing["side"]),
                 },
             )
-            if ing["quantity"] is not None:
-                item["quantity"] = round((item["quantity"] or 0) + ing["quantity"], 3)
+            item["amounts"].append({"recipe": d["name"], "quantity": ing["quantity"]})
             if d["name"] not in item["recipes"]:
                 item["recipes"].append(d["name"])
 
     buy, have = [], []
     seen_names = set()
     for item in items.values():
+        known = [a["quantity"] for a in item["amounts"] if a["quantity"] is not None]
+        if len(item["amounts"]) == 1 and known:
+            item["quantity"] = known[0]
         name_key = norm(item["name"])
         seen_names.add(name_key)
         staple = pantry.get(name_key)

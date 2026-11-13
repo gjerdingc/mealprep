@@ -14,8 +14,9 @@ an Oda cart. The interface is in Norwegian (bokmål).
   italic, `> ` tips and links), so recipes can be pasted straight in. Plain text works as before.
 - **Basisvarer** (pantry staples): staples you normally always have. Tap "Tomt" and the item lands on
   the shopping list.
-- **Handleliste** (shopping list): the ingredients for the coming days' dinners, added up across
-  recipes. Ingredients that are pantry staples in stock are listed separately. Tick
+- **Handleliste** (shopping list): the ingredients for the coming days' dinners, grouped under
+  each dish, with ingredients used by several dishes under "Delt". Amounts are not added up:
+  two dishes needing 400 g each show as "2 × 400 g", and Oda suggests two packs. Ingredients that are pantry staples in stock are listed separately. Tick
   off what you have, add anything else, and press "Ferdig handlet" when it is bought.
 - **Oda**: connect an Oda account under Innstillinger. "Fyll Oda-handlekurven" then looks up
   each item at Oda, lets you choose the product, and adds them to the cart. The app

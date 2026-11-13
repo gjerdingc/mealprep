@@ -307,3 +307,10 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .md code { font-family: ui-monospace, Consolas, monospace; font-size: .9em; background: var(--accent-soft); padding: 1px 4px; border-radius: 4px; }
 .md a { color: var(--accent); }
 .md hr { border: 0; border-top: 1px solid var(--line); width: 100%; }
+
+/* A quiet pill button, e.g. "Endre" on a recipe */
+.pill { flex: none; min-height: 0; padding: 3px 12px; border-radius: 999px; font-size: .82rem; font-weight: 600; color: var(--muted); background: transparent; border: 1px solid var(--line); }
+.pill:hover { border-color: var(--muted); }
+
+/* Small header between dishes in "Må kjøpes" */
+.buy-group { margin: 14px 0 2px; padding-bottom: 4px; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border-bottom: 1px solid var(--line); }
