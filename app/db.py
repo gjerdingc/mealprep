@@ -78,6 +78,11 @@ def today() -> date:
         return date.today()
 
 
+def capitalize_first(name: str) -> str:
+    """Upper-cases only the first letter, so "hvitløk" becomes "Hvitløk" and "MSG" stays "MSG"."""
+    return name[:1].upper() + name[1:]
+
+
 def _add_columns(c, table, columns):
     existing = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
     for name, decl in columns:
@@ -111,6 +116,14 @@ def init():
         columns = {r["name"] for r in c.execute("PRAGMA table_info(recipe_ingredients)")}
         if "side" not in columns:
             c.execute("ALTER TABLE recipe_ingredients ADD COLUMN side INTEGER NOT NULL DEFAULT 0")
+        if get_setting(c, "ingredients_capitalized") != "1":
+            # One time: ingredients saved before names were capitalized on save.
+            rows = c.execute("SELECT id, name FROM recipe_ingredients").fetchall()
+            c.executemany(
+                "UPDATE recipe_ingredients SET name=? WHERE id=?",
+                [(capitalize_first(r["name"]), r["id"]) for r in rows if capitalize_first(r["name"]) != r["name"]],
+            )
+            set_setting(c, "ingredients_capitalized", "1")
         _add_columns(c, "members", [("gcal_calendar_id", "TEXT")])
         _add_columns(
             c, "plan", [("gcal_event_id", "TEXT"), ("gcal_calendar_id", "TEXT"), ("gcal_error", "TEXT")]

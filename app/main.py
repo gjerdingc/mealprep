@@ -285,7 +285,7 @@ def _write_ingredients(c, recipe_id, ingredients):
         (
             recipe_id,
             pos,
-            i.name.strip(),
+            db.capitalize_first(i.name.strip()),
             None if i.side else i.quantity,
             "" if i.side else i.unit.strip(),
             int(i.side),
