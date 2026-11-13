@@ -619,7 +619,7 @@ def build_shopping(c, days: int):
 
 
 @app.get("/api/shopping")
-def get_shopping(days: int = 7):
+def get_shopping(days: int = 10):
     with db.conn() as c:
         return build_shopping(c, days)
 
@@ -662,7 +662,7 @@ def delete_extra(extra_id: int):
 
 
 @app.post("/api/shopping/finish")
-def finish_shopping(days: int = 7):
+def finish_shopping(days: int = 10):
     """Everything on the list is bought: restock staples and start a clean list."""
     first, last = _range(days)
     with db.conn() as c:

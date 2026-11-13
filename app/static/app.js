@@ -21,7 +21,7 @@ const COMMON_STAPLES = [
 let S = null;          // household state from /api/state
 let weekStart = null;  // Monday of the week on screen
 let weekPlan = {};     // date -> plan entry for the week on screen
-let shopDays = 7;
+let shopDays = 10;  // how many days ahead the shopping list covers
 let pantryCategory = 'Annet';  // last category used when adding a staple
 
 // ------------------------------------------------------------------ helpers
