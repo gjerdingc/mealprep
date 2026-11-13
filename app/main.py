@@ -4,14 +4,13 @@ import json
 import os
 import sqlite3
 from datetime import date, datetime, timedelta
-from zoneinfo import ZoneInfo
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db, oda, web_recipes
+from . import db, gcal, oda, web_recipes
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 COOKIE = "mealprep_session"
@@ -21,11 +20,7 @@ db.init()
 app = FastAPI(title="Mealprep", docs_url=None, redoc_url=None, openapi_url=None)
 
 
-def today() -> date:
-    try:
-        return datetime.now(ZoneInfo(os.environ.get("TZ", "Europe/Oslo"))).date()
-    except Exception:
-        return date.today()
+today = db.today
 
 
 def norm(s: str) -> str:
@@ -138,6 +133,7 @@ def state():
             ],
             "oda_connected": oda.is_connected(),
             "web_recipes": web_recipes.is_configured(),
+            "gcal": gcal.status(c),
         }
 
 
@@ -161,7 +157,66 @@ def add_member(body: NameIn):
 @app.delete("/api/members/{member_id}")
 def delete_member(member_id: int):
     with db.conn() as c:
+        days = gcal.upcoming_days(c, "cook_id=?", (member_id,))
         c.execute("DELETE FROM members WHERE id=?", (member_id,))
+    gcal.sync_days(days)  # their dinners now have no cook, so the events go
+    return {"ok": True}
+
+
+class CalendarIn(BaseModel):
+    calendar_id: str = ""
+
+
+@app.put("/api/members/{member_id}/calendar")
+def set_member_calendar(member_id: int, body: CalendarIn):
+    calendar_id = body.calendar_id.strip() or None
+    with db.conn() as c:
+        cur = c.execute(
+            "UPDATE members SET gcal_calendar_id=? WHERE id=?", (calendar_id, member_id)
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Fant ikke kokken")
+    warning = None
+    if calendar_id and gcal.is_configured():
+        try:
+            gcal.check_calendar(calendar_id)
+        except gcal.NotFound:
+            warning = (
+                f"Lagret, men appen finner ikke {calendar_id}. Sjekk at kalenderen er delt "
+                f"med {gcal.service_email()} med «Gjøre endringer i aktiviteter»."
+            )
+        except gcal.GcalError as e:
+            warning = f"Lagret, men kalenderen kunne ikke sjekkes: {e}"
+    error = gcal.sync_upcoming("cook_id=?", (member_id,))
+    return {"ok": True, "warning": warning or error}
+
+
+class GcalSettingsIn(BaseModel):
+    enabled: bool
+
+
+@app.put("/api/gcal")
+def set_gcal(body: GcalSettingsIn):
+    if body.enabled and not gcal.is_configured():
+        raise HTTPException(409, "Google-nøkkelen mangler på serveren")
+    with db.conn() as c:
+        db.set_setting(c, "gcal_enabled", "1" if body.enabled else "0")
+    # Turning it on brings the coming dinners into the calendars straight away.
+    return {"ok": True, "error": gcal.sync_upcoming() if body.enabled else None}
+
+
+@app.post("/api/gcal/sync")
+def gcal_sync(day: str | None = None):
+    """Retries one day, or with no day, every dinner from today on."""
+    with db.conn() as c:
+        if not gcal.is_enabled(c):
+            raise HTTPException(409, "Synk med Google Kalender er slått av")
+    if day:
+        error = gcal.sync_days([_parse_date(day).isoformat()])
+    else:
+        error = gcal.sync_upcoming()
+    if error:
+        raise HTTPException(502, error)
     return {"ok": True}
 
 
@@ -179,12 +234,15 @@ def save_settings(body: SettingsIn):
         except ValueError:
             raise HTTPException(400, "Middagstid må skrives som 17:00")
     with db.conn() as c:
+        old_time = db.get_setting(c, "dinner_time", "17:00")
         if body.dinner_time is not None:
             db.set_setting(c, "dinner_time", body.dinner_time)
         if body.units is not None:
             db.set_setting(c, "units", json.dumps(clean_list(body.units)))
         if body.categories is not None:
             db.set_setting(c, "categories", json.dumps(clean_list(body.categories)))
+    if body.dinner_time is not None and body.dinner_time != old_time:
+        gcal.sync_upcoming()  # every event's times follow the dinner time
     return {"ok": True}
 
 
@@ -279,6 +337,7 @@ def update_recipe(recipe_id: int, body: RecipeIn):
             "UPDATE plan SET shopped=0 WHERE recipe_id=? AND date>=?",
             (recipe_id, today().isoformat()),
         )
+    gcal.sync_upcoming("recipe_id=?", (recipe_id,))  # name or times may have changed
     return {"ok": True}
 
 
@@ -318,8 +377,13 @@ async def web_recipe_import(body: WebImportIn):
 @app.delete("/api/recipes/{recipe_id}")
 def delete_recipe(recipe_id: int):
     with db.conn() as c:
+        days = gcal.upcoming_days(c, "recipe_id=?", (recipe_id,))
+        for day in days:
+            if c.execute("SELECT 1 FROM plan WHERE date=? AND note=''", (day,)).fetchone():
+                gcal.forget_event(c, day)
         c.execute("DELETE FROM plan WHERE recipe_id=? AND note=''", (recipe_id,))
         c.execute("DELETE FROM recipes WHERE id=?", (recipe_id,))
+    gcal.sync_days(days)  # days with a note keep an event titled with the note
     return {"ok": True}
 
 
@@ -420,17 +484,20 @@ def set_plan(day: str, body: PlanIn):
     note = body.note.strip()
     with db.conn() as c:
         if body.recipe_id is None and not note:
+            if day >= today().isoformat():  # past days' events are left as history
+                gcal.forget_event(c, day)
             c.execute("DELETE FROM plan WHERE date=?", (day,))
-            return {"ok": True}
-        old = c.execute("SELECT recipe_id, shopped FROM plan WHERE date=?", (day,)).fetchone()
-        shopped = old["shopped"] if old and old["recipe_id"] == body.recipe_id else 0
-        c.execute(
-            "INSERT INTO plan(date, recipe_id, note, cook_id, shopped) VALUES(?,?,?,?,?) "
-            "ON CONFLICT(date) DO UPDATE SET recipe_id=excluded.recipe_id, note=excluded.note, "
-            "cook_id=excluded.cook_id, shopped=excluded.shopped",
-            (day, body.recipe_id, note, body.cook_id, shopped),
-        )
-    return {"ok": True}
+        else:
+            old = c.execute("SELECT recipe_id, shopped FROM plan WHERE date=?", (day,)).fetchone()
+            shopped = old["shopped"] if old and old["recipe_id"] == body.recipe_id else 0
+            c.execute(
+                "INSERT INTO plan(date, recipe_id, note, cook_id, shopped) VALUES(?,?,?,?,?) "
+                "ON CONFLICT(date) DO UPDATE SET recipe_id=excluded.recipe_id, note=excluded.note, "
+                "cook_id=excluded.cook_id, shopped=excluded.shopped",
+                (day, body.recipe_id, note, body.cook_id, shopped),
+            )
+    # After the commit: a Google error is stored on the day and never undoes the save.
+    return {"ok": True, "gcal_error": gcal.sync_days([day])}
 
 
 # ----------------------------------------------------------------------- shopping

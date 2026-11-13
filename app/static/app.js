@@ -311,6 +311,11 @@ function dayCard(date) {
   if (meta.length || p.shopped) {
     card.append(h('div', { class: 'muted' }, meta.join(' · '), p.shopped ? h('span', { class: 'badge ok', style: 'margin-left:6px' }, 'handlet') : null));
   }
+  if (p.gcal_error && date >= S.today && S.gcal.enabled) {
+    card.append(h('div', { class: 'gcal-error row' },
+      h('span', { class: 'grow' }, `Ikke i kalenderen: ${p.gcal_error}`),
+      h('button', { class: 'small', onclick: () => retryCalendar(date) }, 'Prøv igjen')));
+  }
   if (S.members.length) {
     card.append(h('div', { class: 'chips' },
       S.members.map((m) => h('button', {
@@ -326,10 +331,19 @@ async function savePlan(date, patch) {
   const cur = weekPlan[date] || {};
   const body = { recipe_id: cur.recipe_id ?? null, note: cur.note || '', cook_id: cur.cook_id ?? null, ...patch };
   await run(async () => {
-    await api('PUT', `/plan/${date}`, body);
+    const res = await api('PUT', `/plan/${date}`, body);
     closeDialog();
     await reload();
+    if (res.gcal_error) toast(`Lagret, men kalenderen ble ikke oppdatert: ${res.gcal_error}`);
   });
+}
+
+async function retryCalendar(day) {
+  await run(async () => {
+    await api('POST', day ? `/gcal/sync?day=${day}` : '/gcal/sync');
+    toast(day ? 'Kalenderen er oppdatert' : 'Alle kommende middager er synket');
+  });
+  await reload();
 }
 
 function leastRecent(recipes) {
@@ -903,6 +917,60 @@ function openThemes() {
 }
 document.getElementById('theme-btn').addEventListener('click', openThemes);
 
+/** Google Calendar: which calendar each cook's dinners go to, and the on/off switch. */
+function calendarCard() {
+  const g = S.gcal;
+  const card = h('div', { class: 'card', style: 'display:grid;gap:8px' }, h('h3', null, 'Google Kalender'));
+  if (!g.configured) {
+    card.append(h('p', { class: 'muted' },
+      'Ikke satt opp. Serveren trenger nøkkelen til en Google-tjenestekonto (GOOGLE_SERVICE_ACCOUNT_JSON).'));
+    return card;
+  }
+  const refreshSettings = async () => { await reload(); openSettings(); };
+  card.append(...[
+    h('p', { class: 'muted' },
+      'Middagen legges i kalenderen til den som lager mat, fra «start senest» til middagstid. ',
+      'Del kalenderen din i Google Kalender med denne adressen, med «Gjøre endringer i aktiviteter»:'),
+    h('input', { value: g.service_email, readOnly: true, onfocus: (e) => e.target.select() }),
+    S.members.length
+      ? h('div', { class: 'list' }, S.members.map((m) => {
+          const input = h('input', {
+            value: m.gcal_calendar_id || '', placeholder: 'Kalender-ID, ofte e-postadressen', autocapitalize: 'off',
+          });
+          return h('form', {
+            class: 'item',
+            onsubmit: (e) => {
+              e.preventDefault();
+              run(async () => {
+                const res = await api('PUT', `/members/${m.id}/calendar`, { calendar_id: input.value });
+                await refreshSettings();
+                toast(res.warning || 'Kalenderen er lagret');
+              });
+            },
+          }, h('div', { class: 'label', style: 'min-width:5em' }, m.name), h('div', { class: 'grow' }, input),
+             h('button', { class: 'small', type: 'submit' }, 'Lagre'));
+        }))
+      : h('p', { class: 'muted' }, 'Legg til hvem som lager mat først.'),
+    h('label', { class: 'row' },
+      h('input', {
+        type: 'checkbox', checked: g.enabled,
+        onchange: (e) => run(async () => {
+          const res = await api('PUT', '/gcal', { enabled: e.target.checked });
+          await refreshSettings();
+          if (res.error) toast(`Noe kom ikke inn i kalenderen: ${res.error}`);
+        }),
+      }),
+      h('span', { class: 'grow' }, 'Legg middagene inn i Google Kalender')),
+    g.enabled && (g.errors || g.pending_deletes)
+      ? h('p', { class: 'gcal-error' },
+          [g.errors && `${g.errors} middag(er) er ikke oppdatert i kalenderen.`,
+           g.pending_deletes && `${g.pending_deletes} hendelse(r) venter på å bli slettet.`].filter(Boolean).join(' '))
+      : null,
+    g.enabled && h('button', { onclick: () => retryCalendar(null).then(() => openSettings()) }, 'Synk alle kommende middager'),
+  ].filter(Boolean));
+  return card;
+}
+
 function openSettings() {
   const name = h('input', { placeholder: 'Navn' });
   const time = h('input', {
@@ -929,6 +997,7 @@ function openSettings() {
       h('p', { class: 'muted', style: 'margin-top:6px' }, 'Brukes til å vise når matlagingen må starte.')),
     listEditor('Enheter', 'Vises som forslag når dere skriver inn ingredienser.', 'units', 'Ny enhet, f.eks. klype'),
     listEditor('Kategorier for basisvarer', 'Varer som allerede ligger i en kategori dere fjerner, blir liggende der.', 'categories', 'Ny kategori, f.eks. Drikke'),
+    calendarCard(),
     h('div', { class: 'card', style: 'display:grid;gap:8px' },
       h('h3', null, 'Oda'),
       S.oda_connected

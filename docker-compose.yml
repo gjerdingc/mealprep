@@ -20,6 +20,8 @@ services:
       # Optional: recipe search on the web (Spoonacular) with Norwegian translation (Claude).
       SPOONACULAR_API_KEY: ${SPOONACULAR_API_KEY:-}
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      # Optional: dinners in Google Calendar. The whole service account key (JSON) as one value.
+      GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
     volumes:
       # The database (recipes, plan, pantry, Oda sign-in) lives here.
       - /opt/mealprep:/data

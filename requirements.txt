@@ -2,4 +2,5 @@ fastapi==0.162.4
 uvicorn==0.54.0
 httpx==0.28.1
 anthropic==2.8.0
+google-auth[cryptography]==2.62.0
 tzdata

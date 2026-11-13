@@ -1,6 +1,8 @@
 import os
 import sqlite3
 from contextlib import contextmanager
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 
 DATA_DIR = os.environ.get(
     "DATA_DIR", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data")
@@ -61,7 +63,26 @@ CREATE TABLE IF NOT EXISTS oda_products(
     price TEXT,
     url TEXT
 );
+CREATE TABLE IF NOT EXISTS gcal_deletes(
+    id INTEGER PRIMARY KEY,
+    calendar_id TEXT NOT NULL,
+    event_id TEXT NOT NULL
+);
 """
+
+
+def today() -> date:
+    try:
+        return datetime.now(ZoneInfo(os.environ.get("TZ", "Europe/Oslo"))).date()
+    except Exception:
+        return date.today()
+
+
+def _add_columns(c, table, columns):
+    existing = {r["name"] for r in c.execute(f"PRAGMA table_info({table})")}
+    for name, decl in columns:
+        if name not in existing:
+            c.execute(f"ALTER TABLE {table} ADD COLUMN {name} {decl}")
 
 
 @contextmanager
@@ -90,6 +111,10 @@ def init():
         columns = {r["name"] for r in c.execute("PRAGMA table_info(recipe_ingredients)")}
         if "side" not in columns:
             c.execute("ALTER TABLE recipe_ingredients ADD COLUMN side INTEGER NOT NULL DEFAULT 0")
+        _add_columns(c, "members", [("gcal_calendar_id", "TEXT")])
+        _add_columns(
+            c, "plan", [("gcal_event_id", "TEXT"), ("gcal_calendar_id", "TEXT"), ("gcal_error", "TEXT")]
+        )
 
 
 def get_setting(c, key, default=None):
