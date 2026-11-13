@@ -17,6 +17,9 @@ services:
       TZ: Europe/Oslo
       # Household password for the app, set in the stack's Environment variables.
       APP_PASSWORD: ${APP_PASSWORD}
+      # Optional: recipe search on the web (Spoonacular) with Norwegian translation (Claude).
+      SPOONACULAR_API_KEY: ${SPOONACULAR_API_KEY:-}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     volumes:
       # The database (recipes, plan, pantry, Oda sign-in) lives here.
       - /opt/mealprep:/data

@@ -234,6 +234,14 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .pick { width: 100%; text-align: left; justify-content: space-between; }
 .pre { white-space: pre-wrap; }
 /* Choosing Oda products */
+.web-search { display: grid; gap: 10px; }
+.web-search summary { cursor: pointer; font-weight: 700; }
+.web-results { display: grid; gap: 6px; }
+.web-hit { width: 100%; text-align: left; justify-content: flex-start; gap: 12px; padding: 6px 10px 6px 6px; }
+.web-hit img, .web-hit .no-image { width: 64px; height: 48px; border-radius: 8px; object-fit: cover; flex: none; background: var(--line); }
+.web-hit .no-image { display: grid; place-items: center; }
+.web-title { display: block; font-weight: 600; }
+
 .oda-row { display: grid; gap: 10px; min-width: 0; }
 .products { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 8px; scroll-snap-type: x proximity; }
 .product {

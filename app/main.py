@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db, oda
+from . import db, oda, web_recipes
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 COOKIE = "mealprep_session"
@@ -137,6 +137,7 @@ def state():
                 for r in c.execute("SELECT * FROM pantry ORDER BY category, name COLLATE NOCASE")
             ],
             "oda_connected": oda.is_connected(),
+            "web_recipes": web_recipes.is_configured(),
         }
 
 
@@ -279,6 +280,39 @@ def update_recipe(recipe_id: int, body: RecipeIn):
             (recipe_id, today().isoformat()),
         )
     return {"ok": True}
+
+
+class WebSearchIn(BaseModel):
+    query: str
+
+
+class WebImportIn(BaseModel):
+    id: int
+    servings: int = 4
+
+
+@app.post("/api/web-recipes/search")
+async def web_recipe_search(body: WebSearchIn):
+    try:
+        return await web_recipes.search(body.query[:100])
+    except web_recipes.WebRecipeError as e:
+        raise HTTPException(502, str(e))
+
+
+@app.post("/api/web-recipes/import")
+async def web_recipe_import(body: WebImportIn):
+    """Returns the recipe ready for the recipe form. Nothing is saved until the user saves it."""
+    with db.conn() as c:
+        units = get_list(c, "units")
+        known = sorted(
+            {r["name"] for r in c.execute("SELECT name FROM pantry")}
+            | {r["name"] for r in c.execute("SELECT DISTINCT name FROM recipe_ingredients")},
+            key=str.lower,
+        )
+    try:
+        return await web_recipes.import_recipe(body.id, body.servings, units, known)
+    except web_recipes.WebRecipeError as e:
+        raise HTTPException(502, str(e))
 
 
 @app.delete("/api/recipes/{recipe_id}")

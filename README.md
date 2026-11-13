@@ -19,6 +19,11 @@ an Oda cart. The interface is in Norwegian (bokmål).
   each item at Oda, lets you choose the product, and adds them to the cart. The app
   remembers the product chosen for each ingredient. Payment and delivery time are
   always done at oda.com; the app cannot order anything.
+- **Hent oppskrift fra nettet** (in "Ny oppskrift"): search for a dish, for example "adobo",
+  in Spoonacular's recipe database. The chosen recipe is scaled to the servings in the
+  form, translated to Norwegian by Claude Haiku (units converted to dl, ss, g and so on,
+  ingredient names matched to the ones you already use) and filled into the form. Nothing
+  is saved until you press "Lagre oppskrift". Needs the two API keys below.
 
 An ingredient counts as a pantry staple when its name is the same as the staple's
 name (upper and lower case do not matter).
@@ -40,12 +45,15 @@ Then open http://localhost:8123. Data is stored in `data/mealprep.db`.
 | `APP_PASSWORD` | Household password. If empty, the app is open to anyone who can reach it. |
 | `DATA_DIR`     | Folder for the database. `/data` in the container.                      |
 | `TZ`           | Time zone used to decide what "today" is. Defaults to `Europe/Oslo`.    |
+| `SPOONACULAR_API_KEY` | Optional. Free key from spoonacular.com/food-api, for the recipe search. The free plan has a daily limit. |
+| `ANTHROPIC_API_KEY`   | Optional. Key from console.anthropic.com, used to translate fetched recipes (Claude Haiku, well under 1 øre per recipe). |
 
 ## Deployment
 
 Portainer stack from this repository, compose path `docker-compose.yml`.
 Set these stack environment variables: `APP_PASSWORD` (the household password; the
-app stores an Oda sign-in, so do not leave it empty on a public address).
+app stores an Oda sign-in, so do not leave it empty on a public address), and
+`SPOONACULAR_API_KEY` and `ANTHROPIC_API_KEY` to turn on the recipe search.
 
 The container `mealprep` has no host port. It joins the external Docker network `proxy`
 and serves plain HTTP on port 8080. Point Traefik at `http://mealprep:8080`; Traefik
