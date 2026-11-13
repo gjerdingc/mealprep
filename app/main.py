@@ -192,6 +192,24 @@ def set_member_calendar(member_id: int, body: CalendarIn):
     return {"ok": True, "warning": warning or error}
 
 
+class ColorIn(BaseModel):
+    # Google Calendar colorId "1"-"11", or "" to use the shared colour.
+    color: str = ""
+
+
+@app.put("/api/members/{member_id}/color")
+def set_member_color(member_id: int, body: ColorIn):
+    if body.color and body.color not in gcal.COLORS:
+        raise HTTPException(400, "Ukjent farge")
+    with db.conn() as c:
+        cur = c.execute(
+            "UPDATE members SET gcal_color=? WHERE id=?", (body.color or None, member_id)
+        )
+        if cur.rowcount == 0:
+            raise HTTPException(404, "Fant ikke kokken")
+    return {"ok": True, "gcal_error": gcal.sync_upcoming("cook_id=?", (member_id,))}
+
+
 class GcalSettingsIn(BaseModel):
     enabled: bool
 

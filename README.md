@@ -32,8 +32,11 @@ an Oda cart. The interface is in Norwegian (bokmål).
   the cook or the dinner time changes. A day with no cook gets no event, and events for
   past days are left alone. If Google cannot be reached the plan is still saved; the day
   shows a warning with "Prøv igjen", and Innstillinger has "Synk alle kommende middager".
-  The app only touches events it created itself. The events can get one of Google's
-  event colours (Innstillinger → Google Kalender); otherwise they take the calendar's colour.
+  The app only touches events it created itself. Each cook can get one of Google's event
+  colours, and there is a standard colour for cooks without one (Innstillinger → Google
+  Kalender); with neither, events take the calendar's colour. Several cooks can share one
+  calendar (for example a shared "Middag" calendar: enter the same calendar ID on each
+  cook), and the colour then shows who cooks.
 
 An ingredient counts as a pantry staple when its name is the same as the staple's
 name (upper and lower case do not matter).

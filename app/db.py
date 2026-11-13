@@ -124,7 +124,7 @@ def init():
                 [(capitalize_first(r["name"]), r["id"]) for r in rows if capitalize_first(r["name"]) != r["name"]],
             )
             set_setting(c, "ingredients_capitalized", "1")
-        _add_columns(c, "members", [("gcal_calendar_id", "TEXT")])
+        _add_columns(c, "members", [("gcal_calendar_id", "TEXT"), ("gcal_color", "TEXT")])
         _add_columns(
             c, "plan", [("gcal_event_id", "TEXT"), ("gcal_calendar_id", "TEXT"), ("gcal_error", "TEXT")]
         )

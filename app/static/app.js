@@ -1050,21 +1050,24 @@ const GCAL_COLORS = [
   ['10', 'Basilikum', '#0b8043'], ['11', 'Tomat', '#d50000'],
 ];
 
-function colorPicker(refreshSettings) {
-  const current = S.settings.gcal_color || '';
-  const pick = (id) => run(async () => {
-    const res = await api('PUT', '/settings', { gcal_color: id });
+/** Chips for picking a Google event colour. emptyLabel names the "no colour of its own" choice. */
+function colorPicker({ current, label, emptyLabel, onPick }) {
+  const choice = (id, name, color) => h('button', {
+    class: `color-choice${id === current ? ' on' : ''}`, title: name, 'aria-label': name,
+    'aria-pressed': String(id === current), onclick: () => id !== current && onPick(id),
+  }, color ? h('span', { class: 'color-dot', style: `background:${color}` }) : null, id ? null : emptyLabel);
+  return h('div', { style: 'display:grid;gap:6px' },
+    h('div', null, `${label}: `,
+      h('strong', null, (GCAL_COLORS.find(([id]) => id === current) || [, emptyLabel.toLowerCase()])[1])),
+    h('div', { class: 'chips' }, choice('', emptyLabel), GCAL_COLORS.map(([id, name, color]) => choice(id, name, color))));
+}
+
+function saveColor(path, body, refreshSettings) {
+  return run(async () => {
+    const res = await api('PUT', path, body);
     await refreshSettings();
     if (res.gcal_error) toast(`Noe ble ikke oppdatert i kalenderen: ${res.gcal_error}`);
   });
-  const choice = (id, name, color) => h('button', {
-    class: `color-choice${id === current ? ' on' : ''}`, title: name, 'aria-label': name,
-    'aria-pressed': String(id === current), onclick: () => id !== current && pick(id),
-  }, color ? h('span', { class: 'color-dot', style: `background:${color}` }) : null, id ? null : name);
-  return h('div', { style: 'display:grid;gap:6px' },
-    h('div', null, 'Farge på middagene: ',
-      h('strong', null, (GCAL_COLORS.find(([id]) => id === current) || [, 'kalenderens egen'])[1])),
-    h('div', { class: 'chips' }, choice('', 'Kalenderens egen'), GCAL_COLORS.map(([id, name, color]) => choice(id, name, color))));
 }
 
 /** Google Calendar: which calendar each cook's dinners go to, and the on/off switch. */
@@ -1087,7 +1090,7 @@ function calendarCard() {
           const input = h('input', {
             value: m.gcal_calendar_id || '', placeholder: 'Kalender-ID, ofte e-postadressen', autocapitalize: 'off',
           });
-          return h('form', {
+          const form = h('form', {
             class: 'item',
             onsubmit: (e) => {
               e.preventDefault();
@@ -1099,6 +1102,11 @@ function calendarCard() {
             },
           }, h('div', { class: 'label', style: 'min-width:5em' }, m.name), h('div', { class: 'grow' }, input),
              h('button', { class: 'small', type: 'submit' }, 'Lagre'));
+          if (!g.enabled) return form;
+          return h('div', { style: 'display:grid;gap:6px' }, form, colorPicker({
+            current: m.gcal_color || '', label: `Farge når ${m.name} lager mat`, emptyLabel: 'Standardfargen',
+            onPick: (id) => saveColor(`/members/${m.id}/color`, { color: id }, refreshSettings),
+          }));
         }))
       : h('p', { class: 'muted' }, 'Legg til hvem som lager mat først.'),
     h('label', { class: 'row' },
@@ -1111,7 +1119,11 @@ function calendarCard() {
         }),
       }),
       h('span', { class: 'grow' }, 'Legg middagene inn i Google Kalender')),
-    g.enabled && colorPicker(refreshSettings),
+    g.enabled && colorPicker({
+      current: S.settings.gcal_color || '', label: 'Standardfarge (for kokker uten egen farge)',
+      emptyLabel: 'Kalenderens egen',
+      onPick: (id) => saveColor('/settings', { gcal_color: id }, refreshSettings),
+    }),
     g.enabled && (g.errors || g.pending_deletes)
       ? h('p', { class: 'gcal-error' },
           [g.errors && `${g.errors} middag(er) er ikke oppdatert i kalenderen.`,

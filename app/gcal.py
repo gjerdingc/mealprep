@@ -3,6 +3,8 @@
 The app signs in as a Google service account. Each cook shares their calendar with the
 service account's email address ("Make changes to events"), and the calendar ID is saved
 on the cook in Innstillinger. A dinner gets one event, on the calendar of whoever cooks it.
+Several cooks may use the same calendar (a shared "Middag" calendar); each cook can then
+have their own event colour, so the colour shows who cooks.
 
 The app only ever touches events it created itself: their IDs are stored on the plan day
 (gcal_event_id, gcal_calendar_id). Events that still have to be deleted from Google, because
@@ -263,20 +265,21 @@ def sync_days(days):
         first_error = _flush_deletes(c)
         today = db.today().isoformat()
         dinner_time = db.get_setting(c, "dinner_time", "17:00")
-        color = db.get_setting(c, "gcal_color") or None
+        default_color = db.get_setting(c, "gcal_color") or None
         for day in sorted(set(days)):
             if day < today:
                 continue
             row = c.execute(
                 "SELECT p.*, r.name AS recipe_name, r.prep_min, r.cook_min, "
-                "m.name AS cook_name, m.gcal_calendar_id AS cook_calendar "
+                "m.name AS cook_name, m.gcal_calendar_id AS cook_calendar, m.gcal_color AS cook_color "
                 "FROM plan p LEFT JOIN recipes r ON r.id = p.recipe_id "
                 "LEFT JOIN members m ON m.id = p.cook_id WHERE p.date=?",
                 (day,),
             ).fetchone()
             if not row:
                 continue
-            error = _sync_row(c, row, dinner_time, color)
+            # The cook's own colour first, then the shared one, else the calendar's colour.
+            error = _sync_row(c, row, dinner_time, row["cook_color"] or default_color)
             c.execute("UPDATE plan SET gcal_error=? WHERE date=?", (error, day))
             c.commit()
             first_error = first_error or error
