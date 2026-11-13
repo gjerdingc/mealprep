@@ -135,10 +135,29 @@ def _call(method, path, body=None):
     if res.status_code in (404, 410):
         raise NotFound("Fant ikke kalenderen eller hendelsen")
     if res.status_code == 403:
-        raise GcalError("Appen har ikke lov til å endre kalenderen. Er den delt med «Gjøre endringer i aktiviteter»?")
+        reason, message = _google_reason(res)
+        if reason == "accessNotConfigured" or "has not been used" in message or "disabled" in message:
+            raise GcalError(
+                "Google Calendar API er ikke slått på i Google Cloud-prosjektet. Slå den på under "
+                "«APIs & Services → Library», vent et par minutter og prøv igjen."
+            )
+        raise GcalError(
+            "Appen har ikke lov til å endre kalenderen. Er den delt med «Make changes and see all "
+            f"event details» / «Gjøre endringer i aktiviteter»? (Google: {reason or message or '403'})"
+        )
     if res.status_code >= 400:
         raise GcalError(f"Google Kalender svarte med feil {res.status_code}")
     return res.json() if res.content else None
+
+
+def _google_reason(res):
+    """Google's short reason code and message from an API error response."""
+    try:
+        err = res.json().get("error", {})
+        reasons = [e.get("reason") for e in err.get("errors", []) if e.get("reason")]
+        return (reasons[0] if reasons else ""), str(err.get("message", ""))[:200]
+    except (ValueError, AttributeError):
+        return "", res.text[:200]
 
 
 def _cal(calendar_id):
