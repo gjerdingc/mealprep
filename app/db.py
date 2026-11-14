@@ -124,6 +124,13 @@ def init():
                 [(capitalize_first(r["name"]), r["id"]) for r in rows if capitalize_first(r["name"]) != r["name"]],
             )
             set_setting(c, "ingredients_capitalized", "1")
+        # A note on an ingredient ("til steking"), and an optional small heading it sits under
+        # ("Råkost"). Ingredients with the same section next to each other form one group.
+        _add_columns(
+            c,
+            "recipe_ingredients",
+            [("note", "TEXT NOT NULL DEFAULT ''"), ("section", "TEXT NOT NULL DEFAULT ''")],
+        )
         _add_columns(c, "members", [("gcal_calendar_id", "TEXT"), ("gcal_color", "TEXT")])
         _add_columns(
             c, "plan", [("gcal_event_id", "TEXT"), ("gcal_calendar_id", "TEXT"), ("gcal_error", "TEXT")]

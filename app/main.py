@@ -110,7 +110,14 @@ def load_recipes(c):
         r["ingredients"] = []
     for i in c.execute("SELECT * FROM recipe_ingredients ORDER BY recipe_id, position, id"):
         by_id[i["recipe_id"]]["ingredients"].append(
-            {"name": i["name"], "quantity": i["quantity"], "unit": i["unit"], "side": bool(i["side"])}
+            {
+                "name": i["name"],
+                "quantity": i["quantity"],
+                "unit": i["unit"],
+                "side": bool(i["side"]),
+                "note": i["note"],
+                "section": i["section"],
+            }
         )
     return recipes
 
@@ -286,6 +293,10 @@ class IngredientIn(BaseModel):
     side: bool = False
     quantity: float | None = None
     unit: str = ""
+    # What this amount is for, e.g. "til steking" when butter is listed twice.
+    note: str = ""
+    # Optional small heading the ingredient sits under, e.g. "Råkost".
+    section: str = ""
 
 
 class RecipeIn(BaseModel):
@@ -307,13 +318,15 @@ def _write_ingredients(c, recipe_id, ingredients):
             None if i.side else i.quantity,
             "" if i.side else i.unit.strip(),
             int(i.side),
+            "" if i.side else i.note.strip(),
+            "" if i.side else i.section.strip(),
         )
         for pos, i in enumerate(ingredients)
         if i.name.strip()
     ]
     c.executemany(
-        "INSERT INTO recipe_ingredients(recipe_id, position, name, quantity, unit, side) "
-        "VALUES(?,?,?,?,?,?)",
+        "INSERT INTO recipe_ingredients(recipe_id, position, name, quantity, unit, side, note, section) "
+        "VALUES(?,?,?,?,?,?,?,?)",
         rows,
     )
     remember(c, "units", [r[4] for r in rows])
@@ -586,7 +599,15 @@ def build_shopping(c, days: int):
                     "side": bool(ing["side"]),
                 },
             )
-            item["amounts"].append({"recipe": d["name"], "quantity": ing["quantity"]})
+            # The same ingredient twice in one recipe (butter for the batter and for frying)
+            # is one amount for that dinner, added up.
+            same = next((a for a in item["amounts"] if a["date"] == d["date"]), None)
+            if same is None:
+                item["amounts"].append(
+                    {"recipe": d["name"], "date": d["date"], "quantity": ing["quantity"]}
+                )
+            elif ing["quantity"] is not None:
+                same["quantity"] = (same["quantity"] or 0) + ing["quantity"]
             if d["name"] not in item["recipes"]:
                 item["recipes"].append(d["name"])
 

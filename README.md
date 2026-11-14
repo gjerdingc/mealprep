@@ -12,6 +12,10 @@ an Oda cart. The interface is in Norwegian (bokmål).
 - **Oppskrifter** (recipes): name, prep and cooking time, ingredients with amounts, instructions.
   "Slik gjør du" understands simple Markdown (headings, numbered and bullet lists, bold,
   italic, `> ` tips and links), so recipes can be pasted straight in. Plain text works as before.
+  An ingredient can have a short note (💬), such as "i røra" and "til steking" when butter is
+  listed twice; the shopping list adds such amounts up for that dinner. Optional small
+  headings ("+ Legg til overskrift", moved with ↑ ↓) split the ingredients into groups,
+  such as the fish and a "Råkost" salad.
   "⧉ Kopier" on a recipe starts a new recipe with everything from it (say "Pizza - Pepperoni"
   from "Pizza - Margherita"); give it a new name and change what differs.
 - **Lag maten** (kitchen view): the "👩‍🍳 Lag maten" button on a planned dinner, or on a recipe,

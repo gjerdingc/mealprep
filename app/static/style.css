@@ -233,13 +233,26 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .ing-row .ing-name { grid-column: 1 / 3; grid-row: 1; }
 .ing-row .ing-del { grid-column: 3; grid-row: 1; padding: 0; }
 .ing-row .ing-qty { grid-column: 1; grid-row: 2; }
-.ing-row .ing-unit { grid-column: 2 / 4; grid-row: 2; }
+.ing-row .ing-unit { grid-column: 2; grid-row: 2; }
+.ing-row .ing-note-btn { grid-column: 3; grid-row: 2; padding: 0; }
+.ing-row .ing-note-input { grid-column: 1 / -1; grid-row: 3; }
 .ing-row input { background: var(--bg); }
 @media (min-width: 600px) {
-  .ing-row { grid-template-columns: 120px 130px 1fr 40px; padding: 0; border: 0; background: none; }
-  .ing-row .ing-qty, .ing-row .ing-unit, .ing-row .ing-name, .ing-row .ing-del { grid-column: auto; grid-row: 1; }
+  .ing-row { grid-template-columns: 120px 130px 1fr 40px 40px; padding: 0; border: 0; background: none; }
+  .ing-row .ing-qty, .ing-row .ing-unit, .ing-row .ing-name, .ing-row .ing-note-btn, .ing-row .ing-del { grid-column: auto; grid-row: 1; }
+  .ing-row .ing-note-input { grid-column: 3 / -1; grid-row: 2; }
   .ing-row input { background: var(--card); }
 }
+.ing-note-btn { font-size: .95rem; opacity: .7; }
+/* A small heading between ingredients in the form */
+.ing-heading-row { display: grid; grid-template-columns: 1fr 40px 40px 40px; gap: 4px; align-items: center; margin-top: 6px; }
+.ing-heading-row button { padding: 0; }
+.ing-heading-row input { font-weight: 700; border-style: dashed; }
+
+/* Ingredient groups and notes when showing a recipe */
+.ing-group { font-weight: 700; font-size: .95rem; margin: 12px 0 2px; padding-bottom: 4px; border-bottom: 1px solid var(--line); }
+.ing-group:first-child { margin-top: 0; }
+.ing-note { color: var(--muted); font-size: .9em; font-style: italic; }
 
 /* Suggestions under a text field */
 .ac { position: relative; min-width: 0; }
@@ -394,3 +407,4 @@ main[data-tab="cook"] { max-width: 1100px; }
 /* A ticked ingredient keeps a clear tick; only its text fades */
 .cook-ing.done { opacity: 1; text-decoration: none; }
 .cook-ing.done > span:last-child { opacity: .45; text-decoration: line-through; text-decoration-color: var(--muted); }
+.section-title + .ing-group { margin-top: 4px; }

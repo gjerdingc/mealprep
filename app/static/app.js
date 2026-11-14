@@ -103,6 +103,19 @@ function timeText(r) {
   return parts.join(' + ');
 }
 
+/** Ingredients split into groups under their optional heading, keeping the recipe's order.
+ *  `draw(ingredient, index)` makes one item; `listClass` is the class of each group's list. */
+function ingredientGroups(list, draw, listClass) {
+  const groups = [];
+  list.forEach((i, n) => {
+    const section = i.section || '';
+    if (!groups.length || groups[groups.length - 1].section !== section) groups.push({ section, items: [] });
+    groups[groups.length - 1].items.push(draw(i, n));
+  });
+  return groups.map((g) => [g.section && h('div', { class: 'ing-group' }, g.section), h('div', { class: listClass }, g.items)]);
+}
+const ingNote = (i) => i.note && h('span', { class: 'ing-note' }, i.note);
+
 const qtyText = (q) => (q == null ? '' : String(Math.round(q * 100) / 100));
 const itemText = (i) => [qtyText(i.quantity), i.unit, i.name].filter(Boolean).join(' ');
 /** Shopping list text: amounts per dinner are shown, never added up ("2 × 400 g Kjøttdeig"). */
@@ -538,7 +551,8 @@ function openRecipe(id) {
     h('div', { class: 'card' },
       h('div', { class: 'section-title', style: 'margin:0 0 6px' }, 'Ingredienser'),
       r.ingredients.some((i) => !i.side)
-        ? h('div', { class: 'list' }, r.ingredients.filter((i) => !i.side).map((i) => h('div', { class: 'item' }, itemText(i))))
+        ? ingredientGroups(r.ingredients.filter((i) => !i.side),
+          (i) => h('div', { class: 'item' }, h('span', null, itemText(i)), ingNote(i)), 'list')
         : h('div', { class: 'muted' }, 'Ingen ingredienser lagt inn.')),
     r.ingredients.some((i) => i.side) && h('div', { class: 'card' },
       h('div', { class: 'section-title', style: 'margin:0 0 6px' }, 'Tilbehør på bordet'),
@@ -574,13 +588,48 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
     const what = suggest(h('input', { placeholder: 'Ingrediens', value: ing.name || '', 'aria-label': 'Ingrediens' }),
       () => knownList, { minChars: 1, max: 6 });
     what.classList.add('ing-name');
-    const row = h('div', { class: 'ing-row' }, qty, unit, what,
-      h('button', { type: 'button', class: 'ghost ing-del', 'aria-label': 'Fjern ingrediens', onclick: () => { row.remove(); dlgDirty = true; } }, '✕'));
+    // Optional note, e.g. "til steking". Hidden behind a button until it is wanted.
+    const note = h('input', { class: 'ing-note-input', placeholder: 'Kommentar, f.eks. til steking', value: ing.note || '', 'aria-label': 'Kommentar' });
+    note.hidden = !ing.note;
+    const noteBtn = h('button', {
+      type: 'button', class: 'ghost ing-note-btn', title: 'Legg til en kommentar', 'aria-label': 'Kommentar',
+      onclick: () => { note.hidden = false; note.focus(); },
+    }, '💬');
+    const row = h('div', { class: 'ing-row' }, qty, unit, what, noteBtn,
+      h('button', { type: 'button', class: 'ghost ing-del', 'aria-label': 'Fjern ingrediens', onclick: () => { row.remove(); dlgDirty = true; } }, '✕'),
+      note);
     rows.append(row);
     return row;
   };
+  // A small heading between ingredients, e.g. "Råkost". Everything below it belongs to it,
+  // up to the next heading. It can be moved up and down to where it should be.
+  const addHeading = (text = '') => {
+    const input = h('input', { placeholder: 'Overskrift, f.eks. Råkost', value: text, 'aria-label': 'Overskrift' });
+    const move = (dir) => {
+      const to = dir < 0 ? row.previousElementSibling : row.nextElementSibling;
+      if (!to) return;
+      if (dir < 0) to.before(row); else to.after(row);
+      dlgDirty = true;
+    };
+    const row = h('div', { class: 'ing-heading-row' }, input,
+      h('button', { type: 'button', class: 'ghost', 'aria-label': 'Flytt opp', onclick: () => move(-1) }, '↑'),
+      h('button', { type: 'button', class: 'ghost', 'aria-label': 'Flytt ned', onclick: () => move(1) }, '↓'),
+      h('button', { type: 'button', class: 'ghost', 'aria-label': 'Fjern overskrift', onclick: () => { row.remove(); dlgDirty = true; } }, '✕'));
+    rows.append(row);
+    return row;
+  };
+  const loadIngredients = (list) => {
+    let section = '';
+    for (const i of list) {
+      if ((i.section || '') !== section) {
+        section = i.section || '';
+        if (section) addHeading(section);
+      }
+      addRow(i);
+    }
+  };
   const mainIngredients = r.ingredients.filter((i) => !i.side);
-  mainIngredients.forEach(addRow);
+  loadIngredients(mainIngredients);
   for (let i = mainIngredients.length; i < 3; i++) addRow();
 
   // Sides: things put on the table, with no amount.
@@ -604,7 +653,7 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
     instructions.value = x.instructions;
     rows.replaceChildren();
     sideRows.replaceChildren();
-    x.ingredients.filter((i) => !i.side).forEach(addRow);
+    loadIngredients(x.ingredients.filter((i) => !i.side));
     x.ingredients.filter((i) => i.side).forEach((i) => addSide(i.name));
     if (!rows.children.length) addRow();
     dlgDirty = true;
@@ -613,10 +662,21 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
     () => Boolean(name.value.trim() || [...rows.querySelectorAll('input')].some((i) => i.value.trim())));
 
   const save = () => run(async () => {
-    const ingredients = [...rows.children].map((row) => {
-      const [q, u, n] = row.querySelectorAll('input');
-      return { quantity: q.value === '' ? null : Number(q.value), unit: u.value.trim(), name: n.value.trim() };
-    }).filter((i) => i.name);
+    const ingredients = [];
+    let section = '';
+    for (const row of rows.children) {
+      if (row.classList.contains('ing-heading-row')) {
+        section = row.querySelector('input').value.trim();
+        continue;
+      }
+      const q = row.querySelector('.ing-qty');
+      const n = row.querySelector('.ing-name input').value.trim();
+      if (!n) continue;
+      ingredients.push({
+        quantity: q.value === '' ? null : Number(q.value), unit: row.querySelector('.ing-unit input').value.trim(), name: n,
+        note: row.querySelector('.ing-note-input').value.trim(), section,
+      });
+    }
     for (const input of sideRows.querySelectorAll('input')) {
       if (input.value.trim()) ingredients.push({ name: input.value.trim(), quantity: null, unit: '', side: true });
     }
@@ -642,7 +702,9 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
       h('div', { class: 'section-title' }, 'Ingredienser'),
       h('p', { class: 'muted' }, 'Bruk samme navn som i basisvarene (for eksempel «Melk»), så vet handlelista at dere allerede har det. Mangler en enhet? Skriv den rett inn, så huskes den til neste gang.'),
       rows,
-      h('button', { type: 'button', class: 'small', onclick: () => addRow().querySelector('.ing-name input').focus() }, '+ Legg til ingrediens'),
+      h('div', { class: 'row wrap' },
+        h('button', { type: 'button', class: 'small', onclick: () => addRow().querySelector('.ing-name input').focus() }, '+ Legg til ingrediens'),
+        h('button', { type: 'button', class: 'small', title: 'Del ingrediensene i grupper, f.eks. «Råkost». Valgfritt.', onclick: () => addHeading().querySelector('input').focus() }, '+ Legg til overskrift')),
       h('div', { class: 'section-title' }, 'Tilbehør på bordet'),
       h('p', { class: 'muted' }, 'Ting dere setter fram og forsyner dere av, som tyttebærsyltetøy eller flatbrød. Uten mengde. De legges også i basisvarene, så dere kan markere dem som tomme når det må kjøpes mer.'),
       sideRows,
@@ -735,12 +797,12 @@ async function renderCook() {
   const ingredients = h('section', { class: 'card cook-ings' },
     h('div', { class: 'section-title' }, 'Ingredienser'),
     main.length
-      ? h('div', { class: 'cook-list' }, main.map((i, n) => {
+      ? ingredientGroups(main, (i, n) => {
         const amount = [qtyText(i.quantity), i.unit].filter(Boolean).join(' ');
         return tickable(h('div', { class: 'cook-ing', role: 'button' },
           h('span', { class: 'box', 'aria-hidden': 'true' }),
-          h('span', null, amount && h('strong', null, amount + ' '), i.name)), `i${n}`);
-      }))
+          h('span', null, amount && h('strong', null, amount + ' '), i.name, i.note && ' ', ingNote(i))), `i${n}`);
+      }, 'cook-list')
       : h('div', { class: 'muted' }, 'Ingen ingredienser lagt inn.'),
     sides.length > 0 && h('div', { class: 'section-title', style: 'margin-top:14px' }, 'Tilbehør på bordet'),
     sides.length > 0 && h('div', { class: 'chips' }, sides.map((i) => h('span', { class: 'tag plain' }, i.name))));
