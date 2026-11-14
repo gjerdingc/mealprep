@@ -1198,10 +1198,12 @@ async function openOda(list) {
   }
 
   const total = h('strong');
+  // Price of what is chosen. Oda's own figure after adding to the cart is something else
+  // (it came out well above the cart's subtotal), so this is the one shown both places.
+  const kroner = (chosen) => chosen.reduce((s, c) => s + (parseFloat(c.price) || 0) * c.quantity, 0).toFixed(2).replace('.', ',');
   const updateTotal = () => {
     const chosen = rows.map((r) => r.get()).filter(Boolean);
-    const sum = chosen.reduce((s, c) => s + (parseFloat(c.price) || 0) * c.quantity, 0);
-    total.textContent = `${chosen.length} av ${rows.length} valgt · ca. ${sum.toFixed(2).replace('.', ',')} kr`;
+    total.textContent = `${chosen.length} av ${rows.length} valgt · ca. ${kroner(chosen)} kr`;
   };
 
   const rows = items.map((item) => {
@@ -1287,7 +1289,7 @@ async function openOda(list) {
     try {
       const cart = await api('POST', '/oda/cart', { items: chosen });
       openDialog('Lagt i Oda-handlekurven', [
-        h('p', null, `${chosen.length} varer ble lagt til.` + (cart.total ? ` Handlekurven er nå på ${priceText({ price: cart.total })}.` : '')),
+        h('p', null, `${chosen.length} varer ble lagt til, for ca. ${kroner(chosen)} kr. Endelig pris ser du hos Oda.`),
         cart.messages.length ? h('p', { class: 'muted' }, cart.messages.join(' ')) : null,
         h('p', { class: 'muted' }, 'Se over handlekurven, velg leveringstid og betal hos Oda.'),
         h('a', { class: 'btn primary', href: cart.url || 'https://oda.com/no/cart/', target: '_blank', rel: 'noopener' }, 'Åpne Oda-handlekurven'),
