@@ -455,3 +455,9 @@ main[data-tab="cook"] { max-width: 1100px; }
 /* "Uke 46" above the dates of the week on screen */
 .week-title { text-align: center; line-height: 1.25; }
 .week-no { font-weight: 700; font-size: 1.05rem; }
+
+/* Shopping list: the amount for each dish under an ingredient used more than once */
+.uses { display: flex; flex-wrap: wrap; gap: 4px 6px; margin-top: 3px; }
+.use { font-size: .82rem; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--text); }
+.use b { color: var(--accent-ink); }
+.item.checked .use { opacity: .6; }

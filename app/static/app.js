@@ -128,6 +128,7 @@ const qtyText = (q) => (q == null ? '' : String(Math.round(q * 100) / 100));
 const itemText = (i) => [qtyText(i.quantity), i.unit, i.name].filter(Boolean).join(' ');
 /** Shopping list text: amounts per dinner are shown, never added up ("2 × 400 g Kjøttdeig"). */
 function buyText(i) {
+  if (i.mixed_units) return i.name;  // amounts are shown per dish under the name
   const qs = (i.amounts || []).map((a) => a.quantity).filter((q) => q != null);
   if (qs.length <= 1) return itemText({ ...i, quantity: qs.length ? qs[0] : i.quantity });
   const unit = i.unit ? ` ${i.unit}` : '';
@@ -136,7 +137,16 @@ function buyText(i) {
 }
 
 /** How many packs to suggest at Oda: one per dinner that needs an amount of it. */
-const packCount = (i) => Math.max(1, (i.amounts || []).filter((a) => a.quantity != null).length);
+const packCount = (i) => (i.mixed_units ? 1 : Math.max(1, (i.amounts || []).filter((a) => a.quantity != null).length));
+
+/** Small labels under an ingredient used more than once: the amount for each dish. */
+function useChips(i) {
+  if (!i.amounts || i.amounts.length < 2) return null;
+  return h('div', { class: 'uses' }, i.amounts.map((a) => {
+    const amount = [qtyText(a.quantity), a.unit].filter(Boolean).join(' ');
+    return h('span', { class: 'use' }, amount && h('b', null, amount), amount && ' ', a.side ? `tilbehør · ${a.recipe}` : a.recipe);
+  }));
+}
 
 const SHARED = 'Delt';
 const OUT = 'Basisvarer dere er tomme for';
@@ -157,12 +167,8 @@ function groupBuy(list) {
 
 /** The grey line under an item. Under a dish's own header its name would only repeat,
  *  so only "Delt" items say which dish needs how much. */
-function buyNote(i, group) {
-  const unit = i.unit ? ` ${i.unit}` : '';
-  return [
-    group === SHARED ? i.amounts.map((a) => (a.quantity != null ? `${a.recipe} ${qtyText(a.quantity)}${unit}` : a.recipe)).join(' · ') : '',
-    i.staple_out && i.kind !== 'staple' ? 'basisvare dere er tomme for' : '',
-  ].filter(Boolean).join(' · ');
+function buyNote(i) {
+  return i.staple_out && i.kind !== 'staple' ? 'basisvare dere er tomme for' : '';
 }
 
 const memberName = (id) => (S.members.find((m) => m.id === id) || {}).name;
@@ -1079,14 +1085,15 @@ async function renderShopping() {
       },
     }, 'Ferdig handlet')));
 
-  const buyRow = (i, group) => h('label', { class: `item${i.checked ? ' checked' : ''}` },
+  const buyRow = (i) => h('label', { class: `item${i.checked ? ' checked' : ''}` },
     h('input', {
       type: 'checkbox', checked: i.checked,
       onchange: (e) => run(async () => { await api('POST', '/shopping/check', { key: i.key, checked: e.target.checked }); await render(); }),
     }),
     h('div', { class: 'grow' },
       h('div', { class: 'label' }, buyText(i)),
-      buyNote(i, group) && h('div', { class: 'muted' }, buyNote(i, group))),
+      useChips(i),
+      buyNote(i) && h('div', { class: 'muted' }, buyNote(i))),
     i.kind === 'extra' && h('button', {
       class: 'small ghost', 'aria-label': `Fjern ${i.name}`,
       onclick: (e) => { e.preventDefault(); run(async () => { await api('DELETE', `/shopping/extra/${i.extra_id}`); await render(); }); },
@@ -1106,7 +1113,7 @@ async function renderShopping() {
     list.buy.length
       ? groupBuy(list).map(([group, items]) => [
           h('div', { class: 'buy-group' }, group),
-          h('div', { class: 'list' }, items.map((i) => buyRow(i, group)))])
+          h('div', { class: 'list' }, items.map((i) => buyRow(i)))])
       : h('div', { class: 'muted', style: 'padding:10px 0' }, 'Ingenting å kjøpe.')));
 
   if (list.have.length) {
@@ -1114,7 +1121,8 @@ async function renderShopping() {
       h('h3', null, 'Trengs, men skal finnes hjemme'),
       h('p', { class: 'muted' }, 'Ta en rask sjekk. Trykk «Tomt» for å flytte en vare til lista.'),
       h('div', { class: 'list' }, list.have.map((i) => h('div', { class: 'item' },
-        h('div', { class: 'grow' }, h('div', { class: 'label' }, buyText(i)), h('div', { class: 'muted' }, [i.side ? 'tilbehør' : '', i.recipes.join(', ')].filter(Boolean).join(' · '))),
+        h('div', { class: 'grow' }, h('div', { class: 'label' }, buyText(i)),
+          useChips(i) || h('div', { class: 'muted' }, [i.side ? 'tilbehør' : '', i.recipes.join(', ')].filter(Boolean).join(' · '))),
         h('button', { class: 'small', onclick: () => run(async () => { await api('PATCH', `/pantry/${i.pantry_id}`, { in_stock: false }); await reload(); }) }, 'Tomt'))))));
   }
   view.replaceChildren(...nodes);
@@ -1205,7 +1213,7 @@ async function openOda(list) {
 
     const term = h('input', { placeholder: 'Søk hos Oda etter noe annet', value: item.name, 'aria-label': `Søk hos Oda for ${item.name}` });
     const el = h('div', { class: 'oda-row' },
-      h('div', { class: 'row' }, h('h3', { class: 'grow' }, buyText(item)), state),
+      h('div', { class: 'row' }, h('div', { class: 'grow' }, h('h3', null, buyText(item)), useChips(item)), state),
       cards,
       h('form', {
         class: 'row oda-search',

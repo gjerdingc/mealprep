@@ -583,7 +583,9 @@ def build_shopping(c, days: int):
             "ORDER BY position",
             (d["recipe_id"],),
         ):
-            key = f"{norm(ing['name'])}|{norm(ing['unit'])}"
+            # One line per ingredient, whatever the unit: sugar in tablespoons for one dish
+            # and teaspoons for another is still one thing to buy or check at home.
+            key = f"{norm(ing['name'])}|"
             item = items.setdefault(
                 key,
                 {
@@ -600,11 +602,24 @@ def build_shopping(c, days: int):
                 },
             )
             # The same ingredient twice in one recipe (butter for the batter and for frying)
-            # is one amount for that dinner, added up.
-            same = next((a for a in item["amounts"] if a["date"] == d["date"]), None)
+            # is one amount for that dinner, added up when the unit is the same.
+            same = next(
+                (
+                    a
+                    for a in item["amounts"]
+                    if a["date"] == d["date"] and norm(a["unit"]) == norm(ing["unit"])
+                ),
+                None,
+            )
             if same is None:
                 item["amounts"].append(
-                    {"recipe": d["name"], "date": d["date"], "quantity": ing["quantity"]}
+                    {
+                        "recipe": d["name"],
+                        "date": d["date"],
+                        "quantity": ing["quantity"],
+                        "unit": ing["unit"],
+                        "side": bool(ing["side"]),
+                    }
                 )
             elif ing["quantity"] is not None:
                 same["quantity"] = (same["quantity"] or 0) + ing["quantity"]
@@ -617,6 +632,11 @@ def build_shopping(c, days: int):
         known = [a["quantity"] for a in item["amounts"] if a["quantity"] is not None]
         if len(item["amounts"]) == 1 and known:
             item["quantity"] = known[0]
+        # Different units are never added up; each amount is then shown next to its dish.
+        units = {norm(a["unit"]) for a in item["amounts"]}
+        item["mixed_units"] = len(units) > 1
+        item["unit"] = "" if item["mixed_units"] else item["amounts"][0]["unit"]
+        item["side"] = all(a["side"] for a in item["amounts"])
         name_key = norm(item["name"])
         seen_names.add(name_key)
         staple = pantry.get(name_key)
