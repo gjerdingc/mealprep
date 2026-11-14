@@ -155,9 +155,14 @@ function packCount(i) {
   return 1;
 }
 
-/** Small labels under an ingredient used more than once: the amount for each dish. */
-function useChips(i) {
-  if (!i.amounts || i.amounts.length < 2) return null;
+/** Small labels under an ingredient: the amount for each dish. Only shown when it is used more
+ *  than once, unless `always` (the Oda view, where the dish heading is not on screen). */
+function useChips(i, { always = false } = {}) {
+  if (always && !(i.amounts || []).length) {
+    const why = i.kind === 'extra' ? EXTRA : i.kind === 'staple' ? OUT : null;
+    return why && h('div', { class: 'uses' }, h('span', { class: 'use' }, why));
+  }
+  if (!i.amounts || i.amounts.length < (always ? 1 : 2)) return null;
   return h('div', { class: 'uses' }, i.amounts.map((a) => {
     const amount = [shopQty(a.quantity), a.unit].filter(Boolean).join(' ');
     const what = a.side ? `tilbehør · ${a.recipe}` : a.quantity == null && i.quantity != null ? `${a.recipe} · uten mengde` : a.recipe;
@@ -1248,7 +1253,7 @@ async function openOda(list) {
 
     const term = h('input', { placeholder: 'Søk hos Oda etter noe annet', value: item.name, 'aria-label': `Søk hos Oda for ${item.name}` });
     const el = h('div', { class: 'oda-row' },
-      h('div', { class: 'row' }, h('div', { class: 'grow' }, h('h3', null, buyText(item)), useChips(item)), state),
+      h('div', { class: 'row' }, h('div', { class: 'grow' }, h('h3', null, buyText(item)), useChips(item, { always: true })), state),
       cards,
       h('form', {
         class: 'row oda-search',
