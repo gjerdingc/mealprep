@@ -28,10 +28,11 @@ an Oda cart. The interface is in Norwegian (bokmål).
 - **Basisvarer** (pantry staples): staples you normally always have. Tap "Tomt" and the item lands on
   the shopping list.
 - **Handleliste** (shopping list): the ingredients for the coming days' dinners, grouped under
-  each dish, with ingredients used by several dishes under "Delt". Amounts are not added up:
-  two dishes needing 400 g each show as "2 × 400 g", and Oda suggests two packs. Each ingredient
-  gets one line even when the dishes use different units: sugar in tablespoons for one
-  dish and teaspoons for another is one line, with the amount for each dish shown under it. Ingredients that are pantry staples in stock are listed separately. Tick
+  each dish, with ingredients used by several dishes under "Delt". Amounts in the same unit are added up ("1 stk Agurk"
+  from ½ + ½), with the amount for each dish shown under the name; "+ mer" means a dish
+  needs it without saying how much. Different units, such as sugar in ss for one dish and
+  ts for another, are not added up but still share one line. Oda suggests counted things
+  rounded up, one pack per dish for g and kg, and one pack for ss, dl and the like. Ingredients that are pantry staples in stock are listed separately. Tick
   off what you have, add anything else, and press "Ferdig handlet" when it is bought.
 - **Oda**: connect an Oda account under Innstillinger. "Fyll Oda-handlekurven" then looks up
   each item at Oda, lets you choose the product, and adds them to the cart. The app

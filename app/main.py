@@ -629,13 +629,16 @@ def build_shopping(c, days: int):
     buy, have = [], []
     seen_names = set()
     for item in items.values():
-        known = [a["quantity"] for a in item["amounts"] if a["quantity"] is not None]
-        if len(item["amounts"]) == 1 and known:
-            item["quantity"] = known[0]
-        # Different units are never added up; each amount is then shown next to its dish.
-        units = {norm(a["unit"]) for a in item["amounts"]}
+        # Amounts in the same unit are added up (½ + ½ cucumber is one cucumber); the amount
+        # for each dish is still listed. Different units are never added up.
+        known = [a for a in item["amounts"] if a["quantity"] is not None]
+        units = {norm(a["unit"]) for a in known}
         item["mixed_units"] = len(units) > 1
-        item["unit"] = "" if item["mixed_units"] else item["amounts"][0]["unit"]
+        item["unit"] = known[0]["unit"] if known and not item["mixed_units"] else ""
+        if known and not item["mixed_units"]:
+            item["quantity"] = sum(a["quantity"] for a in known)
+        # Some dish needs it without saying how much: "400 g Kjøttdeig + mer".
+        item["more"] = bool(known) and len(known) < len(item["amounts"])
         item["side"] = all(a["side"] for a in item["amounts"])
         name_key = norm(item["name"])
         seen_names.add(name_key)

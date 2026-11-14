@@ -128,23 +128,40 @@ const qtyText = (q) => (q == null ? '' : String(Math.round(q * 100) / 100));
 const itemText = (i) => [qtyText(i.quantity), i.unit, i.name].filter(Boolean).join(' ');
 /** Shopping list text: amounts per dinner are shown, never added up ("2 × 400 g Kjøttdeig"). */
 function buyText(i) {
-  if (i.mixed_units) return i.name;  // amounts are shown per dish under the name
-  const qs = (i.amounts || []).map((a) => a.quantity).filter((q) => q != null);
-  if (qs.length <= 1) return itemText({ ...i, quantity: qs.length ? qs[0] : i.quantity });
-  const unit = i.unit ? ` ${i.unit}` : '';
-  if (qs.every((q) => q === qs[0])) return `${qs.length} × ${qtyText(qs[0])}${unit} ${i.name}`;
-  return `${qs.map(qtyText).join(' + ')}${unit} ${i.name}`;
+  // Amounts in the same unit are added up by the server; the amount for each dish is shown
+  // under the name. With different units, only the name is shown here.
+  if (i.mixed_units || i.quantity == null) return i.name;
+  return [[shopQty(i.quantity), i.unit, i.name].filter(Boolean).join(' '),
+    i.more && h('span', { class: 'more', title: 'En av middagene har ikke mengde for denne' }, ' + mer')];
+}
+/** Amounts in the shopping list, with halves and quarters as fractions: ½ stk, 1½ dl. */
+function shopQty(q) {
+  if (q == null) return '';
+  const whole = Math.floor(q + 1e-9);
+  const frac = { 0.25: '¼', 0.5: '½', 0.75: '¾' }[Math.round((q - whole) * 100) / 100];
+  if (frac) return `${whole || ''}${frac}`;
+  return qtyText(q).replace('.', ',');
 }
 
 /** How many packs to suggest at Oda: one per dinner that needs an amount of it. */
-const packCount = (i) => (i.mixed_units ? 1 : Math.max(1, (i.amounts || []).filter((a) => a.quantity != null).length));
+/** How many packs Oda suggests: counted things are added up and rounded up (½ + ½ cucumber
+ *  is 1), weights get one pack per dish (two 400 g packs of mince), and spoons, dl and the
+ *  like are one pack (8 ss butter is one butter). */
+function packCount(i) {
+  if (i.mixed_units || i.quantity == null) return 1;
+  const unit = (i.unit || '').toLowerCase();
+  if (['', 'stk', 'pk', 'boks', 'pose', 'flaske', 'glass'].includes(unit)) return Math.max(1, Math.ceil(i.quantity - 1e-9));
+  if (['g', 'kg'].includes(unit)) return Math.max(1, i.amounts.filter((a) => a.quantity != null).length);
+  return 1;
+}
 
 /** Small labels under an ingredient used more than once: the amount for each dish. */
 function useChips(i) {
   if (!i.amounts || i.amounts.length < 2) return null;
   return h('div', { class: 'uses' }, i.amounts.map((a) => {
-    const amount = [qtyText(a.quantity), a.unit].filter(Boolean).join(' ');
-    return h('span', { class: 'use' }, amount && h('b', null, amount), amount && ' ', a.side ? `tilbehør · ${a.recipe}` : a.recipe);
+    const amount = [shopQty(a.quantity), a.unit].filter(Boolean).join(' ');
+    const what = a.side ? `tilbehør · ${a.recipe}` : a.quantity == null && i.quantity != null ? `${a.recipe} · uten mengde` : a.recipe;
+    return h('span', { class: 'use' }, amount && h('b', null, amount), amount && ' ', what);
   }));
 }
 

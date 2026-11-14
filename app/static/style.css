@@ -461,3 +461,4 @@ main[data-tab="cook"] { max-width: 1100px; }
 .use { font-size: .82rem; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--text); }
 .use b { color: var(--accent-ink); }
 .item.checked .use { opacity: .6; }
+.label .more, h3 .more { color: var(--muted); font-weight: 600; }
