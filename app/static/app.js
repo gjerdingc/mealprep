@@ -588,32 +588,29 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
     const what = suggest(h('input', { placeholder: 'Ingrediens', value: ing.name || '', 'aria-label': 'Ingrediens' }),
       () => knownList, { minChars: 1, max: 6 });
     what.classList.add('ing-name');
-    // Optional note, e.g. "til steking". Hidden behind a button until it is wanted.
-    const note = h('input', { class: 'ing-note-input', placeholder: 'Kommentar, f.eks. til steking', value: ing.note || '', 'aria-label': 'Kommentar' });
-    note.hidden = !ing.note;
-    const noteBtn = h('button', {
-      type: 'button', class: 'ghost ing-note-btn', title: 'Legg til en kommentar', 'aria-label': 'Kommentar',
-      onclick: () => { note.hidden = false; note.focus(); },
-    }, '💬');
-    const row = h('div', { class: 'ing-row' }, qty, unit, what, noteBtn,
-      h('button', { type: 'button', class: 'ghost ing-del', 'aria-label': 'Fjern ingrediens', onclick: () => { row.remove(); dlgDirty = true; } }, '✕'),
-      note);
+    // Optional note, e.g. "til steking". Written in a small popup; the icon is coloured when there is one.
+    const noteBtn = h('button', { type: 'button', class: 'ghost ing-note-btn', innerHTML: NOTE_ICON });
+    const showNote = (text) => {
+      row.dataset.note = text;
+      noteBtn.classList.toggle('has-note', Boolean(text));
+      noteBtn.title = text ? `Kommentar: ${text}` : 'Legg til en kommentar';
+      noteBtn.setAttribute('aria-label', noteBtn.title);
+    };
+    noteBtn.addEventListener('click', () => editNote(row.dataset.note, what.querySelector('input').value.trim(), (text) => {
+      if (text !== row.dataset.note) dlgDirty = true;
+      showNote(text);
+    }));
+    const row = h('div', { class: 'ing-row' }, dragHandle(), qty, unit, what, noteBtn,
+      h('button', { type: 'button', class: 'ghost ing-del', 'aria-label': 'Fjern ingrediens', onclick: () => { row.remove(); dlgDirty = true; } }, '✕'));
+    showNote(ing.note || '');
     rows.append(row);
     return row;
   };
   // A small heading between ingredients, e.g. "Råkost". Everything below it belongs to it,
-  // up to the next heading. It can be moved up and down to where it should be.
+  // up to the next heading. Rows are dragged into place by their handle.
   const addHeading = (text = '') => {
     const input = h('input', { placeholder: 'Overskrift, f.eks. Råkost', value: text, 'aria-label': 'Overskrift' });
-    const move = (dir) => {
-      const to = dir < 0 ? row.previousElementSibling : row.nextElementSibling;
-      if (!to) return;
-      if (dir < 0) to.before(row); else to.after(row);
-      dlgDirty = true;
-    };
-    const row = h('div', { class: 'ing-heading-row' }, input,
-      h('button', { type: 'button', class: 'ghost', 'aria-label': 'Flytt opp', onclick: () => move(-1) }, '↑'),
-      h('button', { type: 'button', class: 'ghost', 'aria-label': 'Flytt ned', onclick: () => move(1) }, '↓'),
+    const row = h('div', { class: 'ing-heading-row' }, dragHandle(), input,
       h('button', { type: 'button', class: 'ghost', 'aria-label': 'Fjern overskrift', onclick: () => { row.remove(); dlgDirty = true; } }, '✕'));
     rows.append(row);
     return row;
@@ -674,7 +671,7 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
       if (!n) continue;
       ingredients.push({
         quantity: q.value === '' ? null : Number(q.value), unit: row.querySelector('.ing-unit input').value.trim(), name: n,
-        note: row.querySelector('.ing-note-input').value.trim(), section,
+        note: row.dataset.note || '', section,
       });
     }
     for (const input of sideRows.querySelectorAll('input')) {
@@ -826,6 +823,72 @@ async function renderCook() {
       plan && plan.note && h('div', { class: 'cook-note' }, plan.note)),
     h('p', { class: 'muted' }, 'Trykk på en ingrediens eller et steg for å krysse det av.'),
     h('div', { class: 'cook-grid' }, ingredients, steps)));
+}
+
+// ------------------------------------------------- ingredient rows in the form
+
+const NOTE_ICON = '<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M4 4.5h16a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H10l-5 4v-4H4a1 1 0 0 1-1-1v-10a1 1 0 0 1 1-1z"/><path class="dots" d="M8 10.5h.01M12 10.5h.01M16 10.5h.01"/></svg>';
+
+/** A small popup over the recipe form for an ingredient's note. `onSave` gets the new text ('' removes it). */
+function editNote(current, ingredient, onSave) {
+  const input = h('input', { value: current || '', placeholder: 'F.eks. til steking', 'aria-label': 'Kommentar' });
+  const pop = h('dialog', { class: 'note-pop' });
+  const close = () => { pop.close(); pop.remove(); };
+  pop.append(h('form', {
+    class: 'note-form',
+    onsubmit: (e) => { e.preventDefault(); onSave(input.value.trim()); close(); },
+  },
+  h('strong', null, ingredient ? `Kommentar til ${ingredient}` : 'Kommentar'),
+  input,
+  h('div', { class: 'row' },
+    h('button', { class: 'primary grow', type: 'submit' }, 'Lagre'),
+    current && h('button', { type: 'button', class: 'danger', onclick: () => { onSave(''); close(); } }, 'Fjern'),
+    h('button', { type: 'button', onclick: close }, 'Avbryt'))));
+  pop.addEventListener('cancel', (e) => { e.preventDefault(); close(); });  // Esc closes only the popup
+  pop.addEventListener('click', (e) => { if (e.target === pop) close(); });
+  document.body.append(pop);
+  pop.showModal();
+  input.focus();
+}
+
+/** A handle to drag a row up or down among its siblings. Works with mouse and touch. */
+function dragHandle() {
+  const handle = h('span', { class: 'drag-handle', title: 'Dra for å flytte', 'aria-hidden': 'true' }, '⠿');
+  handle.addEventListener('pointerdown', (e) => {
+    const row = handle.parentElement;
+    const list = row.parentElement;
+    e.preventDefault();
+    row.classList.add('dragging');
+    const move = (ev) => {
+      const y = ev.clientY;
+      for (const other of list.children) {
+        if (other === row) continue;
+        const box = other.getBoundingClientRect();
+        if (y < box.top || y > box.bottom) continue;
+        const mid = box.top + box.height / 2;
+        const otherIsAbove = Boolean(row.compareDocumentPosition(other) & Node.DOCUMENT_POSITION_PRECEDING);
+        if (otherIsAbove && y < mid) other.before(row);
+        else if (!otherIsAbove && y > mid) other.after(row);
+        break;
+      }
+      // Scroll the form when dragging near its top or bottom edge.
+      const view = dlg.getBoundingClientRect();
+      if (y < view.top + 60) dlg.scrollTop -= 14;
+      else if (y > view.bottom - 60) dlg.scrollTop += 14;
+    };
+    const stop = () => {
+      row.classList.remove('dragging');
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', stop);
+      window.removeEventListener('pointercancel', stop);
+      dlgDirty = true;
+    };
+    // On the window, not the handle: moving the row in the page would make the handle lose the pointer.
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', stop);
+    window.addEventListener('pointercancel', stop);
+  });
+  return handle;
 }
 
 /**
