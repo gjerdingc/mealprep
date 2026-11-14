@@ -73,18 +73,22 @@ CREATE TABLE IF NOT EXISTS dinner_log(
     cook_name TEXT NOT NULL DEFAULT '',
     ingredients TEXT NOT NULL DEFAULT '[]'
 );
--- Food groups per ingredient name and the main kind of each dish, for statistics.
+-- Food groups per ingredient name, for statistics.
 -- Suggested by Claude Haiku (manual=0) or set by hand (manual=1, never overwritten).
 CREATE TABLE IF NOT EXISTS ingredient_groups(
     name TEXT PRIMARY KEY COLLATE NOCASE,
     groups TEXT NOT NULL DEFAULT '[]',
     manual INTEGER NOT NULL DEFAULT 0
 );
-CREATE TABLE IF NOT EXISTS recipe_kinds(
-    name TEXT PRIMARY KEY COLLATE NOCASE,
-    kind TEXT NOT NULL DEFAULT '',
-    manual INTEGER NOT NULL DEFAULT 0
+-- Grams in one unit of an ingredient ("Mais", "boks") -> 160, for weights in the statistics.
+CREATE TABLE IF NOT EXISTS ingredient_weights(
+    name TEXT NOT NULL COLLATE NOCASE,
+    unit TEXT NOT NULL COLLATE NOCASE,
+    grams REAL,
+    manual INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY(name, unit)
 );
+DROP TABLE IF EXISTS recipe_kinds;
 CREATE TABLE IF NOT EXISTS gcal_deletes(
     id INTEGER PRIMARY KEY,
     calendar_id TEXT NOT NULL,

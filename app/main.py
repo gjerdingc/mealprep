@@ -379,9 +379,6 @@ def update_recipe(recipe_id: int, body: RecipeIn):
     values = _recipe_values(body)
     with db.conn() as c:
         _check_name_free(c, values[0], recipe_id)
-        old = c.execute("SELECT name FROM recipes WHERE id=?", (recipe_id,)).fetchone()
-        if old:
-            categorize.renamed(c, old["name"], values[0])
         cur = c.execute(
             "UPDATE recipes SET name=?, prep_min=?, cook_min=?, servings=?, instructions=? WHERE id=?",
             (*values, recipe_id),
@@ -877,18 +874,18 @@ def set_ingredient_groups(body: GroupsIn):
     return {"ok": True}
 
 
-class KindIn(BaseModel):
+class WeightIn(BaseModel):
     name: str
-    kind: str
+    unit: str
+    grams: float | None = None
 
 
-@app.put("/api/stats/dish")
-def set_dish_kind(body: KindIn):
-    try:
-        with db.conn() as c:
-            categorize.set_kind(c, body.name, body.kind)
-    except ValueError:
-        raise HTTPException(400, "Ukjent type")
+@app.put("/api/stats/weight")
+def set_ingredient_weight(body: WeightIn):
+    if body.grams is not None and not 0 < body.grams < 100000:
+        raise HTTPException(400, "Vekten må være et positivt tall")
+    with db.conn() as c:
+        categorize.set_weight(c, body.name, body.unit, body.grams)
     return {"ok": True}
 
 

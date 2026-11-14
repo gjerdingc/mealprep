@@ -24,15 +24,19 @@ an Oda cart. The interface is in Norwegian (bokmål).
   opens the recipe large and calm to keep open while cooking: ingredients and steps can be
   ticked off, the screen is kept on where the browser allows it, and it shows who cooks
   and when to start.
-- **Statistikk** (Innstillinger → Statistikk): what you make, who makes it and on which
-  weekdays, the balance between red meat, fish, chicken and vegetarian, the share of dinners
-  with each food group (vegetables, grains, dairy, legumes, fibre, ultra-processed …), and the
-  most made dishes and most used ingredients, for the last month, three months, this year or
-  all time. Each dinner is recorded the day after it was planned, with its recipe, cook and
-  ingredients copied in, so deleting or changing a recipe or a cook later does not change the
-  history. Claude Haiku sorts new ingredients into food groups and dishes by main ingredient
-  on its own when the page is opened (needs `ANTHROPIC_API_KEY`); anything can be corrected
-  at the bottom of the page, and corrections are kept.
+- **Statistikk** (Innstillinger → Statistikk): everything is worked out from the
+  ingredients. Dinners with fish per week (against the advice of 2–3), the share of
+  vegetarian dinners (no meat, chicken or fish among the ingredients) and of dinners with
+  something ultra-processed; the weight of each food group (vegetables, grains, dairy,
+  red meat, fish, legumes, fibre-rich, ultra-processed …); protein sources by weight week
+  by week and per cook; who cooks on which weekdays; and the most made dishes and most
+  used ingredients. For the last month, three months, this year or all time. Each dinner
+  is recorded the day after it was planned, with its recipe, cook and ingredients copied
+  in, so deleting or changing a recipe or a cook later does not change the history.
+  Claude Haiku sorts new ingredients into food groups and estimates the weight of one
+  unit ("1 boks mais = 160 g") when the page is opened (needs `ANTHROPIC_API_KEY`).
+  Both can be corrected under "Matgrupper og vekter" at the bottom of the page, and
+  corrections are kept. Lines with no amount are left out of the weights.
 - **Tema**: Tåke (mist grey with teal, the default), Dis (a little darker grey with turquoise), Skifer (dark slate with teal), Lys, Mørk,
   Solskinn, or Automatisk (follows the device).
 - **Basisvarer** (pantry staples): staples you normally always have. Tap "Tomt" and the item lands on

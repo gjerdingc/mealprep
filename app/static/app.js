@@ -885,12 +885,11 @@ async function renderCook() {
 // --------------------------------------------------------------- statistics
 
 let statsPeriod = '91';
-const categorizing = { running: false, error: null };  // Claude Haiku sorting new names
+const sorting = { running: false, error: null };  // Claude Haiku sorting new ingredients
 let catOpen = false;
 let catSearch = '';
-const KIND_ORDER = ['kjott', 'fisk', 'fugl', 'vegetar', 'annet', 'ukjent'];
-const kindColor = (k) => (k === 'ukjent' ? 'var(--muted)' : `var(--s${KIND_ORDER.indexOf(k) + 1})`);
 const pct = (x) => `${Math.round(x * 100)} %`;
+const kg = (g) => (g < 1000 ? `${Math.round(g)} g` : `${(g / 1000).toFixed(1).replace('.', ',')} kg`);
 const WEEKDAYS = ['mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag', 'søndag'];
 
 /** Hover or tap a mark to see its numbers. The text is set as text, never as HTML. */
@@ -909,173 +908,184 @@ document.addEventListener('pointerdown', moveTip);
 
 async function renderStats() {
   const s = await api('GET', `/stats?period=${statsPeriod}`);
-  const kindName = (k) => (k === 'ukjent' ? 'Ikke sortert ennå' : s.kinds[k]);
+  const label = (g) => s.labels[g];
+  const color = (g) => `var(--s${s.protein.indexOf(g) + 1})`;
   const nodes = [];
 
   nodes.push(h('div', { class: 'row wrap' },
     h('button', { class: 'small', onclick: () => { location.hash = `#${lastTab}`; } }, '‹ Tilbake'),
     h('h2', { class: 'grow' }, 'Statistikk'),
-    h('div', { class: 'chips' }, [['30', 'Siste måned'], ['91', 'Siste 3 måneder'], ['year', 'I år'], ['all', 'Alt']].map(([p, label]) =>
-      h('button', { class: `chip${statsPeriod === p ? ' on' : ''}`, onclick: () => { statsPeriod = p; render(); } }, label)))));
+    h('div', { class: 'chips' }, [['30', 'Siste måned'], ['91', 'Siste 3 måneder'], ['year', 'I år'], ['all', 'Alt']].map(([p, text]) =>
+      h('button', { class: `chip${statsPeriod === p ? ' on' : ''}`, onclick: () => { statsPeriod = p; render(); } }, text)))));
 
-  // Sorting new ingredients and dishes runs by itself; this only says what is going on.
-  const unsorted = s.missing.ingredients + s.missing.dishes;
-  if (unsorted && s.ai && !categorizing.running && !categorizing.error) {
-    categorizing.running = true;
+  // Sorting new ingredients runs by itself; this only says what is going on.
+  const unsorted = s.missing.names + s.missing.weights;
+  if (unsorted && s.ai && !sorting.running && !sorting.error) {
+    sorting.running = true;
     api('POST', '/stats/categorize')
-      .catch((e) => { categorizing.error = e.message; })
-      .finally(() => { categorizing.running = false; if (currentTab() === 'stats') render(); });
+      .catch((e) => { sorting.error = e.message; })
+      .finally(() => { sorting.running = false; if (currentTab() === 'stats') render(); });
   }
-  if (categorizing.running) {
-    nodes.push(h('div', { class: 'stat-note' }, `Claude Haiku sorterer ${unsorted} nye ingredienser og retter i matgrupper … Tallene oppdateres når det er ferdig.`));
-  } else if (unsorted && categorizing.error) {
-    nodes.push(h('div', { class: 'stat-note warn row' }, h('span', { class: 'grow' }, `${unsorted} ingredienser og retter er ikke sortert: ${categorizing.error}`),
-      h('button', { class: 'small', onclick: () => { categorizing.error = null; render(); } }, 'Prøv igjen')));
+  if (sorting.running) {
+    nodes.push(h('div', { class: 'stat-note' }, 'Claude Haiku sorterer nye ingredienser i matgrupper og anslår vektene … Tallene oppdateres når det er ferdig.'));
+  } else if (unsorted && sorting.error) {
+    nodes.push(h('div', { class: 'stat-note warn row' }, h('span', { class: 'grow' }, `Noen ingredienser er ikke sortert: ${sorting.error}`),
+      h('button', { class: 'small', onclick: () => { sorting.error = null; render(); } }, 'Prøv igjen')));
   } else if (unsorted && !s.ai) {
-    nodes.push(h('div', { class: 'stat-note warn' }, `${unsorted} ingredienser og retter er ikke sortert. Automatisk sortering krever ANTHROPIC_API_KEY på serveren; dere kan også sortere selv nederst på siden.`));
+    nodes.push(h('div', { class: 'stat-note warn' }, 'Noen ingredienser er ikke sortert. Automatisk sortering krever ANTHROPIC_API_KEY på serveren; de kan også sorteres nederst på siden.'));
   }
 
   if (!s.dinners) {
     nodes.push(h('div', { class: 'card empty' }, statsPeriod === 'all'
       ? 'Ingen middager er registrert ennå. Hver planlagte middag kommer med her dagen etter, så statistikken bygges opp av seg selv.'
       : 'Ingen middager med oppskrift i denne perioden. Prøv en lengre periode.'));
-  } else {
-    const n = s.dinners;
-    const by = (k) => s.by_kind[k] || 0;
-    nodes.push(h('div', { class: 'kpis' },
-      h('div', { class: 'card kpi' }, h('div', { class: 'section-title' }, 'Middager'), h('div', { class: 'v' }, String(n)),
-        h('div', { class: 's' }, [`${s.distinct} ulike retter`, statsPeriod !== 'all' && s.new ? `${s.new} ${s.new === 1 ? 'ny' : 'nye'}` : '', s.without_recipe ? `${s.without_recipe} uten oppskrift` : ''].filter(Boolean).join(' · '))),
-      h('div', { class: 'card kpi' }, h('div', { class: 'section-title' }, 'Fisk per uke'),
-        h('div', { class: 'v' }, s.fish_per_week.toFixed(1).replace('.', ',')),
-        h('div', { class: 's' }, `snitt over ${String(s.weeks).replace('.', ',')} uker`),
-        h('span', { class: `goal ${s.fish_per_week >= 2 ? 'ok' : 'under'}` }, s.fish_per_week >= 2 ? '✓ Anbefalt 2–3' : '▼ Anbefalt 2–3')),
-      h('div', { class: 'card kpi' }, h('div', { class: 'section-title' }, 'Vegetar'), h('div', { class: 'v' }, pct(by('vegetar') / n)),
-        h('div', { class: 's' }, `${by('vegetar')} av ${n} middager`)),
-      h('div', { class: 'card kpi' }, h('div', { class: 'section-title' }, 'Ultraprosessert'), h('div', { class: 'v' }, pct(s.ultra / n)),
-        h('div', { class: 's' }, `${s.ultra} middager hadde noe ultraprosessert`))));
-
-    const kindsShown = KIND_ORDER.filter((k) => by(k));
-    const legend = h('div', { class: 'legend' }, kindsShown.map((k) => h('span', null, h('i', { style: `background:${kindColor(k)}` }), kindName(k))));
-
-    // Kinds of dinners over time, stacked columns.
-    const max = Math.max(2, ...s.over_time.map((b) => Object.values(b.counts).reduce((a, x) => a + x, 0)));
-    const top = Math.ceil(max / 2) * 2;
-    const every = s.over_time.length > 18 ? 2 : 1;
-    nodes.push(h('div', { class: 'card' },
-      h('h3', null, s.monthly ? 'Hva slags middager, måned for måned' : 'Hva slags middager, uke for uke'),
-      h('div', { class: 'muted' }, 'Hovedingrediensen i hver middag. Anbefalingen er fisk 2–3 ganger i uka og lite rødt kjøtt.'),
-      legend,
-      h('div', { class: 'stat-cols' },
-        h('div', { class: 'yax' }, [0, 0.5, 1].map((f) => h('span', { style: `bottom:${f * 100}%` }, String(Math.round(top * f))))),
-        h('div', { class: 'plot' }, s.over_time.map((b) => {
-          const total = Object.values(b.counts).reduce((a, x) => a + x, 0);
-          return h('div', {
-            class: 'col',
-            'data-tip': `${s.monthly ? b.label : `Uke ${b.label}`}\n${KIND_ORDER.filter((k) => b.counts[k]).map((k) => `${kindName(k)}: ${b.counts[k]}`).join('\n')}\nTotalt: ${total}`,
-          }, KIND_ORDER.filter((k) => b.counts[k]).map((k) => h('b', { style: `height:calc(${(b.counts[k] / top) * 100}% - 2px);background:${kindColor(k)}` })));
-        }))),
-      h('div', { class: 'xax' }, s.over_time.map((b, i) => h('span', null, i % every ? '' : b.label)))));
-
-    const cooks = s.cooks.filter((c) => c.total);
-    nodes.push(h('div', { class: 'two' },
-      h('div', { class: 'card' },
-        h('h3', null, 'Hvem lager hva'),
-        h('div', { class: 'muted' }, 'Fordelingen av hver kokks middager. Tallet til høyre er antall middager.'),
-        legend.cloneNode(true),
-        cooks.map((c) => h('div', { class: 'cook-row' },
-          h('strong', null, c.name || 'Ingen satt'),
-          h('div', { class: 'seg' }, KIND_ORDER.filter((k) => c.kinds[k]).map((k) => {
-            const share = c.kinds[k] / c.total;
-            return h('b', {
-              class: k === 'vegetar' ? 'dark' : '', style: `flex:${c.kinds[k]};background:${kindColor(k)}`,
-              'data-tip': `${c.name || 'Ingen satt'}\n${kindName(k)}: ${c.kinds[k]} (${pct(share)})`,
-            }, share >= 0.15 ? pct(share) : '');
-          })),
-          h('div', { class: 'num' }, String(c.total))))),
-      h('div', { class: 'card' },
-        h('h3', null, 'Hvem lager når'),
-        h('div', { class: 'muted' }, 'Antall middager per ukedag.'),
-        h('div', { class: 'sm' }, cooks.filter((c) => c.name).map((c, _, named) => {
-          const most = Math.max(1, ...named.flatMap((x) => x.weekdays));  // one scale for everyone
-          return h('div', null, h('h4', null, c.name),
-            h('div', { class: 'wk' }, c.weekdays.map((x, d) => h('b', { style: `height:${(x / most) * 100}%`, 'data-tip': `${c.name}, ${WEEKDAYS[d]}: ${x}` }))),
-            h('div', { class: 'wkx' }, 'MTOTFLS'.split('').map((d) => h('span', null, d))));
-        })))));
-
-    nodes.push(h('div', { class: 'card' },
-      h('h3', null, 'Matgrupper i middagene'),
-      h('div', { class: 'muted' }, 'Hvor stor andel av middagene som hadde noe fra hver gruppe. Ultraprosessert er markert i oransje.'),
-      h('div', { class: 'hbars' }, [...s.groups].sort((a, b) => (a.key === 'ultraprosessert') - (b.key === 'ultraprosessert') || b.share - a.share).map((g) =>
-        h('div', { class: 'hb', 'data-tip': `${g.label}: ${pct(g.share)} av middagene` },
-          h('span', null, g.label),
-          h('div', { class: 'track' }, h('div', { class: `bar${g.key === 'ultraprosessert' ? ' flag' : ''}`, style: `width:${g.share * 100}%` })),
-          h('span', { class: 'val' }, pct(g.share)))))));
-
-    const most = Math.max(1, ...s.top_dishes.map((d) => d.count));
-    const mostIng = Math.max(1, ...s.top_ingredients.map((d) => d.count));
-    nodes.push(h('div', { class: 'two' },
-      h('div', { class: 'card' },
-        h('h3', null, 'Mest lagde retter'),
-        h('table', { class: 'stat-table' },
-          h('thead', null, h('tr', null, ['Rett', 'Ganger', 'Oftest laget av', 'Sist'].map((t) => h('th', null, t)))),
-          h('tbody', null, s.top_dishes.map((d) => h('tr', null,
-            h('td', null, d.name),
-            h('td', { class: 'n' }, h('span', { class: 'mini', style: `width:${(d.count / most) * 48}px` }), String(d.count)),
-            h('td', null, d.cook || '–'),
-            h('td', { class: 'muted nowrap' }, fmtShort(d.last))))))),
-      h('div', { class: 'card' },
-        h('h3', null, 'Mest brukte ingredienser'),
-        h('div', { class: 'muted' }, 'Antall middager ingrediensen var med i. Krydder, olje og annet basis er utelatt.'),
-        h('div', { class: 'hbars' }, s.top_ingredients.map((i) => h('div', { class: 'hb', 'data-tip': `${i.name}: med i ${i.count} av ${n} middager` },
-          h('span', null, i.name),
-          h('div', { class: 'track' }, h('div', { class: 'bar', style: `width:${(i.count / mostIng) * 100}%` })),
-          h('span', { class: 'val' }, String(i.count))))))));
+    nodes.push(categoryEditor());
+    view.replaceChildren(...nodes);
+    return;
   }
+
+  const n = s.dinners;
+  nodes.push(h('div', { class: 'kpis' },
+    h('div', { class: 'card kpi' }, h('div', { class: 'section-title' }, 'Middager'), h('div', { class: 'v' }, String(n)),
+      h('div', { class: 's' }, [`${s.distinct} ulike retter`, statsPeriod !== 'all' && s.new ? `${s.new} ${s.new === 1 ? 'ny' : 'nye'}` : '', s.without_recipe ? `${s.without_recipe} uten oppskrift` : ''].filter(Boolean).join(' · '))),
+    h('div', { class: 'card kpi' }, h('div', { class: 'section-title' }, 'Middager med fisk'),
+      h('div', { class: 'v' }, s.fish_per_week.toFixed(1).replace('.', ','), h('span', { class: 'unit' }, ' per uke')),
+      h('div', { class: 's' }, `${s.fish} middager over ${String(s.weeks).replace('.', ',')} uker`),
+      h('span', { class: `goal ${s.fish_per_week >= 2 ? 'ok' : 'under'}` }, `${s.fish_per_week >= 2 ? '✓' : '▼'} Anbefalt 2–3`)),
+    h('div', { class: 'card kpi' }, h('div', { class: 'section-title' }, 'Vegetar'), h('div', { class: 'v' }, pct(s.vegetarian / n)),
+      h('div', { class: 's' }, `${s.vegetarian} av ${n} middager uten kjøtt, kylling eller fisk`)),
+    h('div', { class: 'card kpi' }, h('div', { class: 'section-title' }, 'Ultraprosessert'), h('div', { class: 'v' }, pct(s.ultra / n)),
+      h('div', { class: 's' }, `${s.ultra} middager hadde noe ultraprosessert`))));
+
+  if (s.lines_unweighed) {
+    nodes.push(h('div', { class: 'stat-note' }, `${s.lines_unweighed} av ${s.lines} ingredienslinjer har ingen mengde eller vekt, og er ikke med i grammene.`));
+  }
+
+  // What the dinners are made of, by weight. An ingredient can be in several groups.
+  const groups = [...s.groups].sort((a, b) => (a.key === 'ultraprosessert') - (b.key === 'ultraprosessert') || b.grams - a.grams);
+  const heaviest = Math.max(1, ...groups.map((g) => g.grams));
+  nodes.push(h('div', { class: 'card' },
+    h('h3', null, 'Hva middagene er laget av'),
+    h('div', { class: 'muted' }, `Vekt per matgruppe, ${kg(s.total_grams)} til sammen uten krydder og basis. En ingrediens kan høre til flere grupper (fiskepinner er både fisk og korn). Ultraprosessert er markert i oransje.`),
+    h('div', { class: 'hbars' }, groups.map((g) => h('div', { class: 'hb wide', 'data-tip': `${g.label}: ${kg(g.grams)}\nmed i ${pct(g.share)} av middagene` },
+      h('span', null, g.label),
+      h('div', { class: 'track' }, h('div', { class: `bar${g.key === 'ultraprosessert' ? ' flag' : ''}`, style: `width:${(g.grams / heaviest) * 100}%` })),
+      h('span', { class: 'val' }, kg(g.grams)),
+      h('span', { class: 'val muted-val' }, `${pct(g.share)} av middagene`))))));
+
+  // Protein sources over time, stacked by weight.
+  const shown = s.protein.filter((g) => s.over_time.some((b) => b.grams[g]));
+  const legend = h('div', { class: 'legend' }, shown.map((g) => h('span', null, h('i', { style: `background:${color(g)}` }), label(g))));
+  const max = Math.max(1, ...s.over_time.map((b) => s.protein.reduce((a, g) => a + (b.grams[g] || 0), 0)));
+  const step = max <= 2000 ? 500 : max <= 5000 ? 1000 : 2000;
+  const top = Math.ceil(max / step) * step;
+  const every = s.over_time.length > 18 ? 2 : 1;
+  nodes.push(h('div', { class: 'card' },
+    h('h3', null, s.monthly ? 'Proteinkilder, måned for måned' : 'Proteinkilder, uke for uke'),
+    h('div', { class: 'muted' }, 'Vekten av kjøtt, kylling, fisk og belgfrukter i middagene, for hele oppskriften.'),
+    legend,
+    h('div', { class: 'stat-cols' },
+      h('div', { class: 'yax' }, [0, 0.5, 1].map((f) => h('span', { style: `bottom:${f * 100}%` }, f ? kg(top * f) : '0'))),
+      h('div', { class: 'plot' }, s.over_time.map((b) => h('div', {
+        class: 'col',
+        'data-tip': `${s.monthly ? b.label : `Uke ${b.label}`} · ${b.dinners} middager\n${shown.filter((g) => b.grams[g]).map((g) => `${label(g)}: ${kg(b.grams[g])}`).join('\n') || 'Ingen proteinkilder registrert'}`,
+      }, shown.filter((g) => b.grams[g]).map((g) => h('b', { style: `height:calc(${(b.grams[g] / top) * 100}% - 2px);background:${color(g)}` })))))),
+    h('div', { class: 'xax' }, s.over_time.map((b, i) => h('span', null, i % every ? '' : b.label)))));
+
+  const cooks = s.cooks.filter((c) => c.total);
+  nodes.push(h('div', { class: 'two' },
+    h('div', { class: 'card' },
+      h('h3', null, 'Hvem lager hva'),
+      h('div', { class: 'muted' }, 'Proteinkildene i hver kokks middager, etter vekt. Tallet til høyre er antall middager.'),
+      legend.cloneNode(true),
+      cooks.map((c) => {
+        const total = shown.reduce((a, g) => a + (c.grams[g] || 0), 0);
+        return h('div', { class: 'cook-row' },
+          h('strong', null, c.name || 'Ingen satt'),
+          total
+            ? h('div', { class: 'seg' }, shown.filter((g) => c.grams[g]).map((g) => {
+              const share = c.grams[g] / total;
+              return h('b', {
+                class: g === 'belgfrukter' ? 'dark' : '', style: `flex:${c.grams[g]};background:${color(g)}`,
+                'data-tip': `${c.name || 'Ingen satt'}\n${label(g)}: ${kg(c.grams[g])} (${pct(share)})`,
+              }, share >= 0.15 ? pct(share) : '');
+            }))
+            : h('div', { class: 'muted' }, 'Ingen registrert'),
+          h('div', { class: 'num' }, String(c.total)));
+      })),
+    h('div', { class: 'card' },
+      h('h3', null, 'Hvem lager når'),
+      h('div', { class: 'muted' }, 'Antall middager per ukedag.'),
+      h('div', { class: 'sm' }, cooks.filter((c) => c.name).map((c, _, named) => {
+        const most = Math.max(1, ...named.flatMap((x) => x.weekdays));  // one scale for everyone
+        return h('div', null, h('h4', null, c.name),
+          h('div', { class: 'wk' }, c.weekdays.map((x, d) => h('b', { style: `height:${(x / most) * 100}%`, 'data-tip': `${c.name}, ${WEEKDAYS[d]}: ${x}` }))),
+          h('div', { class: 'wkx' }, 'MTOTFLS'.split('').map((d) => h('span', null, d))));
+      })))));
+
+  const most = Math.max(1, ...s.top_dishes.map((d) => d.count));
+  const mostIng = Math.max(1, ...s.top_ingredients.map((d) => d.count));
+  nodes.push(h('div', { class: 'two' },
+    h('div', { class: 'card' },
+      h('h3', null, 'Mest lagde retter'),
+      h('table', { class: 'stat-table' },
+        h('thead', null, h('tr', null, ['Rett', 'Ganger', 'Oftest laget av', 'Sist'].map((t) => h('th', null, t)))),
+        h('tbody', null, s.top_dishes.map((d) => h('tr', null,
+          h('td', null, d.name),
+          h('td', { class: 'n' }, h('span', { class: 'mini', style: `width:${(d.count / most) * 48}px` }), String(d.count)),
+          h('td', null, d.cook || '–'),
+          h('td', { class: 'muted nowrap' }, fmtShort(d.last))))))),
+    h('div', { class: 'card' },
+      h('h3', null, 'Mest brukte ingredienser'),
+      h('div', { class: 'muted' }, 'Antall middager ingrediensen var med i. Krydder og basis er utelatt.'),
+      h('div', { class: 'hbars' }, s.top_ingredients.map((i) => h('div', { class: 'hb', 'data-tip': `${i.name}: med i ${i.count} av ${n} middager\n${kg(i.grams)} til sammen` },
+        h('span', null, i.name),
+        h('div', { class: 'track' }, h('div', { class: 'bar', style: `width:${(i.count / mostIng) * 100}%` })),
+        h('span', { class: 'val' }, String(i.count))))))));
 
   nodes.push(categoryEditor());
   view.replaceChildren(...nodes);
 }
 
-/** The place to correct how ingredients and dishes are sorted. Corrections are never overwritten. */
+/** Admin: the food groups and unit weights of each ingredient. Corrections are never overwritten. */
 function categoryEditor() {
   const box = h('details', { class: 'card stat-cats', open: catOpen });
   const body = h('div', { class: 'cat-body' }, h('p', { class: 'muted' }, 'Henter …'));
-  box.append(h('summary', null, h('h3', null, 'Sortering av retter og ingredienser')),
-    h('p', { class: 'muted' }, 'Claude Haiku foreslår hovedingrediens for rettene og matgrupper for ingrediensene. Det dere endrer her, blir stående og brukes i statistikken.'),
+  box.append(h('summary', null, h('h3', null, 'Matgrupper og vekter')),
+    h('p', { class: 'muted' }, 'Claude Haiku foreslår matgrupper for hver ingrediens og hvor mye én enhet veier, som 1 boks mais = 160 g. Det dere endrer her, blir stående.'),
     body);
   const fill = async () => {
     const cats = await api('GET', '/stats/categories');
-    const search = h('input', { type: 'search', placeholder: 'Søk etter rett eller ingrediens', value: catSearch });
-    const lists = h('div', { class: 'cat-lists' });
+    const search = h('input', { type: 'search', placeholder: 'Søk etter ingrediens', value: catSearch });
+    const onlyOpen = h('input', { type: 'checkbox' });
+    const list = h('div', { class: 'list' });
     const save = (path, payload) => run(async () => { await api('PUT', path, payload); toast('Lagret'); await render(); });
+    const origin = (manual, known) => h('span', { class: 'cat-origin' }, manual ? 'satt av dere' : known ? 'forslag fra Haiku' : 'ikke sortert');
     const draw = () => {
       const q = search.value.trim().toLowerCase();
       catSearch = search.value;
-      const dishes = cats.dishes.filter((d) => d.name.toLowerCase().includes(q));
-      const ings = cats.ingredients.filter((i) => i.name.toLowerCase().includes(q));
-      const origin = (x) => h('span', { class: 'cat-origin' }, x.manual ? 'satt av dere' : (x.kind ?? x.groups) == null ? 'ikke sortert' : 'forslag fra Haiku');
-      lists.replaceChildren(
-        h('div', { class: 'section-title' }, `Retter (${dishes.length})`),
-        h('div', { class: 'list' }, dishes.map((d) => {
-          const sel = h('select', { 'aria-label': `Hovedingrediens for ${d.name}`, onchange: () => save('/stats/dish', { name: d.name, kind: sel.value }) },
-            d.kind ? null : h('option', { value: '' }, 'Velg …'),
-            Object.entries(cats.kinds).map(([k, label]) => h('option', { value: k, selected: d.kind === k }, label)));
-          return h('div', { class: 'item cat-item' }, h('div', { class: 'grow' }, h('div', { class: 'label' }, d.name), origin(d)), h('div', { class: 'cat-select' }, sel));
-        })),
-        h('div', { class: 'section-title', style: 'margin-top:16px' }, `Ingredienser (${ings.length})`),
-        h('div', { class: 'list' }, ings.map((i) => {
-          const on = new Set(i.groups || []);
-          return h('div', { class: 'cat-ing' },
-            h('div', null, h('span', { class: 'label' }, i.name), ' ', origin(i)),
-            h('div', { class: 'chips' }, Object.entries(cats.groups).map(([g, label]) => h('button', {
-              class: `chip small${on.has(g) ? ' on' : ''}`,
-              onclick: () => { if (on.has(g)) on.delete(g); else on.add(g); save('/stats/ingredient', { name: i.name, groups: [...on] }); },
-            }, label))));
-        })));
+      const shown = cats.ingredients.filter((i) => i.name.toLowerCase().includes(q) && (!onlyOpen.checked || !i.manual || i.units.some((u) => !u.manual)));
+      list.replaceChildren(h('div', { class: 'muted' }, `${shown.length} ingredienser`), ...shown.map((i) => {
+        const on = new Set(i.groups || []);
+        return h('div', { class: 'cat-ing' },
+          h('div', null, h('span', { class: 'label' }, i.name), ' ', origin(i.manual, i.groups != null)),
+          h('div', { class: 'chips' }, Object.entries(cats.groups).map(([g, text]) => h('button', {
+            class: `chip small${on.has(g) ? ' on' : ''}`,
+            onclick: () => { if (on.has(g)) on.delete(g); else on.add(g); save('/stats/ingredient', { name: i.name, groups: [...on] }); },
+          }, text))),
+          i.units.length > 0 && h('div', { class: 'cat-weights' }, i.units.map((u) => {
+            const grams = h('input', {
+              type: 'number', min: 0, step: 'any', inputMode: 'decimal', value: u.grams ?? '', 'aria-label': `Gram i 1 ${u.unit || 'stk'} ${i.name}`,
+              onchange: () => save('/stats/weight', { name: i.name, unit: u.unit, grams: grams.value === '' ? null : Number(grams.value) }),
+            });
+            return h('label', { class: 'cat-weight' }, `1 ${u.unit || 'stk'} =`, grams, 'g', origin(u.manual, u.known));
+          })));
+      }));
     };
     search.addEventListener('input', draw);
+    onlyOpen.addEventListener('change', draw);
     draw();
-    body.replaceChildren(search, lists);
+    body.replaceChildren(search, h('label', { class: 'row muted', style: 'font-size:.9rem' }, onlyOpen, 'Vis bare det dere ikke har sjekket'), list);
   };
   // Also fires when the box is drawn already open, after the page is redrawn.
   box.addEventListener('toggle', () => { catOpen = box.open; if (box.open) run(fill); });
