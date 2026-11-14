@@ -24,6 +24,15 @@ an Oda cart. The interface is in Norwegian (bokmål).
   opens the recipe large and calm to keep open while cooking: ingredients and steps can be
   ticked off, the screen is kept on where the browser allows it, and it shows who cooks
   and when to start.
+- **Statistikk** (Innstillinger → Statistikk): what you make, who makes it and on which
+  weekdays, the balance between red meat, fish, chicken and vegetarian, the share of dinners
+  with each food group (vegetables, grains, dairy, legumes, fibre, ultra-processed …), and the
+  most made dishes and most used ingredients, for the last month, three months, this year or
+  all time. Each dinner is recorded the day after it was planned, with its recipe, cook and
+  ingredients copied in, so deleting or changing a recipe or a cook later does not change the
+  history. Claude Haiku sorts new ingredients into food groups and dishes by main ingredient
+  on its own when the page is opened (needs `ANTHROPIC_API_KEY`); anything can be corrected
+  at the bottom of the page, and corrections are kept.
 - **Tema**: Tåke (mist grey with teal, the default), Dis (a little darker grey with turquoise), Skifer (dark slate with teal), Lys, Mørk,
   Solskinn, or Automatisk (follows the device).
 - **Basisvarer** (pantry staples): staples you normally always have. Tap "Tomt" and the item lands on
@@ -76,7 +85,7 @@ Then open http://localhost:8123. Data is stored in `data/mealprep.db`.
 | `DATA_DIR`     | Folder for the database. `/data` in the container.                      |
 | `TZ`           | Time zone used to decide what "today" is. Defaults to `Europe/Oslo`.    |
 | `SPOONACULAR_API_KEY` | Optional. Free key from spoonacular.com/food-api, for the recipe search. The free plan has a daily limit. |
-| `ANTHROPIC_API_KEY`   | Optional. Key from console.anthropic.com, used to translate fetched recipes (Claude Haiku, well under 1 øre per recipe). |
+| `ANTHROPIC_API_KEY`   | Optional. Key from console.anthropic.com, used to translate fetched recipes and to sort ingredients and dishes for the statistics (Claude Haiku, well under 1 øre per recipe or batch of names). |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Optional. The whole JSON key of a Google service account, for Google Calendar. `GOOGLE_SERVICE_ACCOUNT_FILE` (a path to the key file) works too. |
 
 ### Google Calendar setup (one time)

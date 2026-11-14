@@ -1,3 +1,4 @@
+import json
 import os
 import sqlite3
 from contextlib import contextmanager
@@ -62,6 +63,27 @@ CREATE TABLE IF NOT EXISTS oda_products(
     name TEXT NOT NULL,
     price TEXT,
     url TEXT
+);
+-- A fixed record of each dinner once its day has passed, for statistics. Names are copied
+-- in, so deleting or editing a recipe or a cook later does not change history.
+CREATE TABLE IF NOT EXISTS dinner_log(
+    date TEXT PRIMARY KEY,
+    recipe_name TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT '',
+    cook_name TEXT NOT NULL DEFAULT '',
+    ingredients TEXT NOT NULL DEFAULT '[]'
+);
+-- Food groups per ingredient name and the main kind of each dish, for statistics.
+-- Suggested by Claude Haiku (manual=0) or set by hand (manual=1, never overwritten).
+CREATE TABLE IF NOT EXISTS ingredient_groups(
+    name TEXT PRIMARY KEY COLLATE NOCASE,
+    groups TEXT NOT NULL DEFAULT '[]',
+    manual INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS recipe_kinds(
+    name TEXT PRIMARY KEY COLLATE NOCASE,
+    kind TEXT NOT NULL DEFAULT '',
+    manual INTEGER NOT NULL DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS gcal_deletes(
     id INTEGER PRIMARY KEY,
@@ -132,6 +154,7 @@ def init():
             [("note", "TEXT NOT NULL DEFAULT ''"), ("section", "TEXT NOT NULL DEFAULT ''")],
         )
         _add_columns(c, "members", [("gcal_calendar_id", "TEXT"), ("gcal_color", "TEXT")])
+        log_past_dinners(c)  # history from before the log existed, as the recipes are now
         _add_columns(
             c, "plan", [("gcal_event_id", "TEXT"), ("gcal_calendar_id", "TEXT"), ("gcal_error", "TEXT")]
         )
@@ -148,3 +171,42 @@ def set_setting(c, key, value):
         "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
         (key, value),
     )
+
+
+# ------------------------------------------------------------------------- history
+
+
+def log_day(c, day):
+    """Writes (or removes) the history record for one day from the plan as it is now."""
+    row = c.execute(
+        "SELECT p.recipe_id, p.note, r.name AS recipe_name, m.name AS cook_name FROM plan p "
+        "LEFT JOIN recipes r ON r.id = p.recipe_id LEFT JOIN members m ON m.id = p.cook_id "
+        "WHERE p.date=?",
+        (day,),
+    ).fetchone()
+    if not row or not (row["recipe_name"] or row["note"]):
+        c.execute("DELETE FROM dinner_log WHERE date=?", (day,))
+        return
+    ingredients = [
+        {"name": i["name"], "quantity": i["quantity"], "unit": i["unit"], "side": bool(i["side"])}
+        for i in c.execute(
+            "SELECT name, quantity, unit, side FROM recipe_ingredients WHERE recipe_id=? "
+            "ORDER BY position, id",
+            (row["recipe_id"],),
+        )
+    ] if row["recipe_id"] else []
+    c.execute(
+        "INSERT INTO dinner_log(date, recipe_name, note, cook_name, ingredients) VALUES(?,?,?,?,?) "
+        "ON CONFLICT(date) DO UPDATE SET recipe_name=excluded.recipe_name, note=excluded.note, "
+        "cook_name=excluded.cook_name, ingredients=excluded.ingredients",
+        (day, row["recipe_name"] or "", row["note"] or "", row["cook_name"] or "", json.dumps(ingredients, ensure_ascii=False)),
+    )
+
+
+def log_past_dinners(c):
+    """Records every past day that has no history record yet. Cheap when nothing is new."""
+    for r in c.execute(
+        "SELECT date FROM plan WHERE date < ? AND date NOT IN (SELECT date FROM dinner_log)",
+        (today().isoformat(),),
+    ).fetchall():
+        log_day(c, r["date"])

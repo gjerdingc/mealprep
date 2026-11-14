@@ -10,7 +10,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import db, gcal, oda, web_recipes
+from . import categorize, db, gcal, oda, stats, web_recipes
 
 APP_PASSWORD = os.environ.get("APP_PASSWORD", "")
 COOKIE = "mealprep_session"
@@ -125,6 +125,7 @@ def load_recipes(c):
 @app.get("/api/state")
 def state():
     with db.conn() as c:
+        db.log_past_dinners(c)
         return {
             "today": today().isoformat(),
             "members": [dict(r) for r in c.execute("SELECT * FROM members ORDER BY id")],
@@ -166,6 +167,7 @@ def add_member(body: NameIn):
 def delete_member(member_id: int):
     with db.conn() as c:
         days = gcal.upcoming_days(c, "cook_id=?", (member_id,))
+        db.log_past_dinners(c)  # keep their name on the dinners they have made
         c.execute("DELETE FROM members WHERE id=?", (member_id,))
     gcal.sync_days(days)  # their dinners now have no cook, so the events go
     return {"ok": True}
@@ -377,6 +379,9 @@ def update_recipe(recipe_id: int, body: RecipeIn):
     values = _recipe_values(body)
     with db.conn() as c:
         _check_name_free(c, values[0], recipe_id)
+        old = c.execute("SELECT name FROM recipes WHERE id=?", (recipe_id,)).fetchone()
+        if old:
+            categorize.renamed(c, old["name"], values[0])
         cur = c.execute(
             "UPDATE recipes SET name=?, prep_min=?, cook_min=?, servings=?, instructions=? WHERE id=?",
             (*values, recipe_id),
@@ -433,6 +438,7 @@ def delete_recipe(recipe_id: int):
         for day in days:
             if c.execute("SELECT 1 FROM plan WHERE date=? AND note=''", (day,)).fetchone():
                 gcal.forget_event(c, day)
+        db.log_past_dinners(c)  # past dinners with this recipe stay in the history
         c.execute("DELETE FROM plan WHERE recipe_id=? AND note=''", (recipe_id,))
         c.execute("DELETE FROM recipes WHERE id=?", (recipe_id,))
     gcal.sync_days(days)  # days with a note keep an event titled with the note
@@ -548,6 +554,8 @@ def set_plan(day: str, body: PlanIn):
                 "cook_id=excluded.cook_id, shopped=excluded.shopped",
                 (day, body.recipe_id, note, body.cook_id, shopped),
             )
+        if day < today().isoformat():  # a past day changed afterwards: history follows
+            db.log_day(c, day)
     # After the commit: a Google error is stored on the day and never undoes the save.
     return {"ok": True, "gcal_error": gcal.sync_days([day])}
 
@@ -831,6 +839,57 @@ async def oda_cart(body: CartIn):
                 (norm(i.name), i.product_id, i.product_name, i.price, i.url, i.image),
             )
     return cart
+
+
+# ---------------------------------------------------------------------- statistics
+
+
+@app.get("/api/stats")
+def get_stats(period: str = "91"):
+    with db.conn() as c:
+        db.log_past_dinners(c)
+        return stats.build(c, period)
+
+
+@app.post("/api/stats/categorize")
+async def categorize_missing():
+    try:
+        return {"done": await categorize.categorize_missing()}
+    except categorize.CategorizeError as e:
+        raise HTTPException(502, str(e))
+
+
+@app.get("/api/stats/categories")
+def get_categories():
+    with db.conn() as c:
+        return stats.categories(c)
+
+
+class GroupsIn(BaseModel):
+    name: str
+    groups: list[str]
+
+
+@app.put("/api/stats/ingredient")
+def set_ingredient_groups(body: GroupsIn):
+    with db.conn() as c:
+        categorize.set_groups(c, body.name, body.groups)
+    return {"ok": True}
+
+
+class KindIn(BaseModel):
+    name: str
+    kind: str
+
+
+@app.put("/api/stats/dish")
+def set_dish_kind(body: KindIn):
+    try:
+        with db.conn() as c:
+            categorize.set_kind(c, body.name, body.kind)
+    except ValueError:
+        raise HTTPException(400, "Ukjent type")
+    return {"ok": True}
 
 
 # ------------------------------------------------------------------------- static
