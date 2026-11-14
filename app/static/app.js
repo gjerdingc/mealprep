@@ -83,6 +83,13 @@ const iso = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0
 const addDays = (s, n) => { const d = D(s); d.setDate(d.getDate() + n); return iso(d); };
 const monday = (s) => addDays(s, -((D(s).getDay() + 6) % 7));
 const fmtDay = (s) => D(s).toLocaleDateString('nb-NO', { weekday: 'long', day: 'numeric', month: 'short' });
+/** ISO week number, as used in Norway: weeks start on Monday, and week 1 holds the first Thursday. */
+function weekNumber(s) {
+  const d = D(s);
+  d.setDate(d.getDate() + 3 - ((d.getDay() + 6) % 7));  // Thursday of this week
+  const jan4 = new Date(d.getFullYear(), 0, 4, 12);
+  return 1 + Math.round((d - jan4) / 864e5 / 7 - (3 - ((jan4.getDay() + 6) % 7)) / 7);
+}
 const fmtShort = (s) => D(s).toLocaleDateString('nb-NO', { day: 'numeric', month: 'short' });
 
 function mins(n) {
@@ -310,8 +317,9 @@ async function renderWeek() {
   const nodes = [
     h('div', { class: 'toolbar' },
       h('button', { class: 'small', onclick: () => { weekStart = addDays(weekStart, -7); render(); } }, '‹ Forrige'),
-      h('div', { class: 'grow', style: 'text-align:center;font-weight:700' },
-        `${fmtShort(weekStart)} – ${fmtShort(addDays(weekStart, 6))}`),
+      h('div', { class: 'grow week-title' },
+        h('div', { class: 'week-no' }, `Uke ${weekNumber(weekStart)}`),
+        h('div', { class: 'muted' }, `${fmtShort(weekStart)} – ${fmtShort(addDays(weekStart, 6))}`)),
       h('button', { class: 'small', onclick: () => { weekStart = addDays(weekStart, 7); render(); } }, 'Neste ›')),
   ];
   if (isThisWeek) nodes.push(tonightCard(weekPlan[S.today]));

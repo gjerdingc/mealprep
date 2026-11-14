@@ -451,3 +451,7 @@ main[data-tab="cook"] { max-width: 1100px; }
 .cook-ing.done { opacity: 1; text-decoration: none; }
 .cook-ing.done > span:last-child { opacity: .45; text-decoration: line-through; text-decoration-color: var(--muted); }
 .section-title + .ing-group { margin-top: 4px; }
+
+/* "Uke 46" above the dates of the week on screen */
+.week-title { text-align: center; line-height: 1.25; }
+.week-no { font-weight: 700; font-size: 1.05rem; }
