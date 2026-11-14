@@ -12,6 +12,14 @@ an Oda cart. The interface is in Norwegian (bokmål).
 - **Oppskrifter** (recipes): name, prep and cooking time, ingredients with amounts, instructions.
   "Slik gjør du" understands simple Markdown (headings, numbered and bullet lists, bold,
   italic, `> ` tips and links), so recipes can be pasted straight in. Plain text works as before.
+  "⧉ Kopier" on a recipe starts a new recipe with everything from it (say "Pizza - Pepperoni"
+  from "Pizza - Margherita"); give it a new name and change what differs.
+- **Lag maten** (kitchen view): the "👩‍🍳 Lag maten" button on a planned dinner, or on a recipe,
+  opens the recipe large and calm to keep open while cooking: ingredients and steps can be
+  ticked off, the screen is kept on where the browser allows it, and it shows who cooks
+  and when to start.
+- **Tema**: Tåke (mist grey with teal, the default), Skifer (dark slate with teal), Lys, Mørk,
+  Solskinn, or Automatisk (follows the device).
 - **Basisvarer** (pantry staples): staples you normally always have. Tap "Tomt" and the item lands on
   the shopping list.
 - **Handleliste** (shopping list): the ingredients for the coming days' dinners, grouped under

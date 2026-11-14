@@ -7,6 +7,7 @@
   --accent: #2f6b4f;
   --accent-text: #ffffff;
   --accent-soft: #e3efe8;
+  --accent-ink: var(--accent);  /* the accent used as text */
   --warn: #b45309;
   --warn-soft: #fdf0d9;
   --danger: #b3261e;
@@ -50,6 +51,45 @@
 :root[data-theme="sun"] .top h1 { color: var(--accent); }
 :root[data-theme="sun"] .card { box-shadow: 0 2px 0 #f1d9ae; }
 :root[data-theme="sun"] .chip.on { background: #1f8a7a; border-color: #1f8a7a; }
+
+/* Tåke: mist grey with teal. The default theme. */
+:root[data-theme="mist"] {
+  --bg: #e6e9eb;
+  --card: #f6f7f8;
+  --text: #263036;
+  --muted: #68747b;
+  --line: #d2d8dc;
+  --accent: #14857f;
+  --accent-text: #ffffff;
+  --accent-soft: #d4ebe8;
+  --accent-ink: #14857f;
+  --warn: #a15c07;
+  --warn-soft: #f6ead3;
+  --danger: #b3261e;
+  --danger-soft: #f7e0dd;
+  --backdrop: linear-gradient(180deg, #d3d9dd 0, #dfe3e6 140px, #e6e9eb 340px);
+}
+:root[data-theme="mist"] .card { box-shadow: 0 1px 2px rgba(38, 48, 54, .06); }
+
+/* Skifer: dark slate with the same teal. Teal text is lighter so it reads on the dark background. */
+:root[data-theme="slate"] {
+  --bg: #2a2f37;
+  --card: #333944;
+  --text: #e7eaee;
+  --muted: #9ca5b0;
+  --line: #424a56;
+  --accent: #14857f;
+  --accent-text: #ffffff;
+  --accent-soft: #1d3d3e;
+  --accent-ink: #4fc1b7;
+  --warn: #f0b35a;
+  --warn-soft: #3d3220;
+  --danger: #f08a82;
+  --danger-soft: #43292a;
+  --backdrop: none;
+  color-scheme: dark;
+}
+:root[data-theme="slate"] .card { box-shadow: 0 1px 2px rgba(0, 0, 0, .25); }
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body {
@@ -63,7 +103,7 @@ h1, h2, h3, p { margin: 0; }
 h1 { font-size: 1.15rem; }
 h2 { font-size: 1.1rem; }
 h3 { font-size: 1rem; }
-a { color: var(--accent); }
+a { color: var(--accent-ink); }
 
 .top {
   position: sticky; top: 0; z-index: 5;
@@ -79,7 +119,7 @@ a { color: var(--accent); }
   text-decoration: none; color: var(--muted); font-weight: 600; white-space: nowrap;
 }
 .tabs a:hover { background: var(--accent-soft); }
-.tabs a.active { background: var(--accent-soft); color: var(--accent); }
+.tabs a.active { background: var(--accent-soft); color: var(--accent-ink); }
 .top-actions { display: flex; margin-left: auto; }
 main { max-width: 1040px; margin: 0 auto; padding: 16px 16px 24px; display: grid; gap: 12px; }
 main[data-tab="shopping"], main[data-tab="week"] { max-width: 760px; }
@@ -139,7 +179,8 @@ label.field { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); f
 .grow { flex: 1; min-width: 0; }
 .muted { color: var(--muted); font-size: .9rem; }
 .empty { text-align: center; color: var(--muted); padding: 28px 12px; display: grid; gap: 12px; justify-items: center; }
-.section-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 700; margin-top: 6px; }
+/* Tinted a little towards the theme colour, but still quiet. */
+.section-title { font-size: .8rem; text-transform: uppercase; letter-spacing: .06em; color: color-mix(in srgb, var(--accent-ink) 60%, var(--muted)); font-weight: 700; margin-top: 6px; }
 .toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
 /* Week */
@@ -149,7 +190,7 @@ label.field { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); f
 .day.today { border-color: var(--accent); border-width: 2px; }
 .day.past { opacity: .6; }
 .day-label { font-weight: 700; font-size: .85rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
-.day.today .day-label { color: var(--accent); }
+.day.today .day-label { color: var(--accent-ink); }
 .dish { font-size: 1.08rem; font-weight: 700; text-align: left; justify-content: flex-start; width: 100%; border: 0; background: none; padding: 0; min-height: 0; color: var(--text); }
 .plan-btn { border-style: dashed; color: var(--muted); width: 100%; }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
@@ -162,7 +203,7 @@ label.field { display: grid; gap: 4px; font-size: .85rem; color: var(--muted); f
 .badge { display: inline-block; border-radius: 999px; padding: 2px 9px; font-size: .78rem; font-weight: 700; }
 .badge.warn { background: var(--warn-soft); color: var(--warn); }
 .badge.out { background: var(--danger-soft); color: var(--danger); }
-.badge.ok { background: var(--accent-soft); color: var(--accent); }
+.badge.ok { background: var(--accent-soft); color: var(--accent-ink); }
 
 /* Lists */
 .list { display: grid; }
@@ -229,6 +270,8 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .swatch-light { background: linear-gradient(135deg, #f6f4ee 50%, #2f6b4f 50%); }
 .swatch-dark { background: linear-gradient(135deg, #15181a 50%, #6fbf97 50%); }
 .swatch-sun { background: linear-gradient(135deg, #ffd98a 50%, #d6402b 50%); }
+.swatch-mist { background: linear-gradient(135deg, #d3d9dd 50%, #14857f 50%); }
+.swatch-slate { background: linear-gradient(135deg, #2a2f37 50%, #14857f 50%); }
 .swatch-auto { background: linear-gradient(135deg, #f6f4ee 50%, #15181a 50%); }
 .top button { padding: 6px 8px; white-space: nowrap; }
 .pick { width: 100%; text-align: left; justify-content: space-between; }
@@ -306,10 +349,10 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .md .md-h { margin-top: 6px; }
 .md h4.md-h { font-size: .95rem; }
 .md ol, .md ul { padding-left: 1.4em; display: grid; gap: 4px; }
-.md li::marker { color: var(--accent); font-weight: 700; }
+.md li::marker { color: var(--accent-ink); font-weight: 700; }
 .md blockquote { padding: 8px 12px; border-radius: 8px; background: var(--accent-soft); border-left: 3px solid var(--accent); }
 .md code { font-family: ui-monospace, Consolas, monospace; font-size: .9em; background: var(--accent-soft); padding: 1px 4px; border-radius: 4px; }
-.md a { color: var(--accent); }
+.md a { color: var(--accent-ink); }
 .md hr { border: 0; border-top: 1px solid var(--line); width: 100%; }
 
 /* A quiet pill button, e.g. "Endre" on a recipe */
@@ -317,4 +360,37 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .pill:hover { border-color: var(--muted); }
 
 /* Small header between dishes in "Må kjøpes" */
-.buy-group { margin: 14px 0 2px; padding-bottom: 4px; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); border-bottom: 1px solid var(--line); }
+.buy-group { margin: 14px 0 2px; padding-bottom: 4px; font-size: .78rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: var(--accent-ink); border-bottom: 1px solid var(--line); }
+
+/* Kitchen view: one recipe, large and calm, kept open while cooking */
+body.cooking .top { display: none; }
+main[data-tab="cook"] { max-width: 1100px; }
+.cook { display: grid; gap: 14px; font-size: 1.12rem; }
+.cook-title { font-size: 1.9rem; line-height: 1.2; }
+.cook-meta { font-size: 1rem; margin-top: 4px; }
+.cook-note { margin-top: 8px; padding: 8px 12px; border-radius: 10px; background: var(--accent-soft); }
+.cook-grid { display: grid; gap: 14px; align-items: start; }
+.cook .section-title { margin: 0 0 10px; font-size: .85rem; }
+.cook-list { display: grid; }
+.cook-ing { display: flex; gap: 12px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--line); }
+.cook-ing:first-child { border-top: 0; }
+.cook-ing .box {
+  flex: none; width: 24px; height: 24px; margin-top: 2px; border-radius: 7px; border: 2px solid var(--line);
+  display: grid; place-items: center; color: var(--accent-text); font-size: .8rem; font-weight: 700;
+}
+.cook-ing.done .box { background: var(--accent); border-color: var(--accent); }
+.cook-ing.done .box::after { content: '✓'; }
+.cook-steps .md { gap: 12px; line-height: 1.6; }
+.cook-steps .md ol, .cook-steps .md ul { gap: 4px; }
+.tick { cursor: pointer; border-radius: 8px; transition: opacity .15s; -webkit-tap-highlight-color: transparent; }
+.cook-steps li.tick { padding: 6px 8px; margin-left: -8px; }
+.cook-steps p.tick { padding: 6px 8px; margin: 0 -8px; }
+.cook-steps .tick:hover { background: var(--accent-soft); }
+.tick.done { opacity: .45; text-decoration: line-through; text-decoration-color: var(--muted); }
+@media (min-width: 760px) {
+  .cook-grid { grid-template-columns: minmax(260px, 1fr) 1.7fr; }
+  .cook-ings { position: sticky; top: 12px; }
+}
+/* A ticked ingredient keeps a clear tick; only its text fades */
+.cook-ing.done { opacity: 1; text-decoration: none; }
+.cook-ing.done > span:last-child { opacity: .45; text-decoration: line-through; text-decoration-color: var(--muted); }

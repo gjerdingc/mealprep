@@ -3,6 +3,8 @@
 const view = document.getElementById('view');
 const dlg = document.getElementById('dlg');
 const THEMES = [
+  ['mist', 'Tåke', 'Dempet grå med blågrønt'],
+  ['slate', 'Skifer', 'Mørk grå med blågrønt'],
   ['', 'Automatisk', 'Følger telefonen eller PC-en'],
   ['light', 'Lys', 'Rolig og lys'],
   ['dark', 'Mørk', 'Behagelig om kvelden'],
@@ -231,8 +233,10 @@ function suggest(input, options, { minChars = 1, max = 6 } = {}) {
 
 const currentTab = () => {
   const t = location.hash.replace('#', '');
+  if (t.startsWith('cook/')) return 'cook';
   return ['week', 'recipes', 'pantry', 'shopping'].includes(t) ? t : 'week';
 };
+let lastTab = 'week';  // where "Tilbake" in the kitchen view goes
 
 async function refresh() { S = await api('GET', '/state'); }
 
@@ -240,8 +244,10 @@ async function render() {
   if (!S) return;
   const tab = currentTab();
   view.dataset.tab = tab;
+  document.body.classList.toggle('cooking', tab === 'cook');
+  if (tab !== 'cook') { lastTab = tab; keepAwake(false); }
   for (const a of document.querySelectorAll('#tabs a')) a.classList.toggle('active', a.dataset.tab === tab);
-  await run({ week: renderWeek, recipes: renderRecipes, pantry: renderPantry, shopping: renderShopping }[tab]);
+  await run({ week: renderWeek, recipes: renderRecipes, pantry: renderPantry, shopping: renderShopping, cook: renderCook }[tab]);
 }
 
 // Two people use this from their own phones, so always fetch fresh data before drawing.
@@ -316,7 +322,9 @@ function tonightCard(p) {
   const cook = memberName(p.cook_id);
   return h('div', { class: 'card tonight' },
     h('div', { class: 'muted' }, 'I kveld'),
-    h('div', { class: 'big' }, p.recipe_name || p.note),
+    h('div', { class: 'row' },
+      h('div', { class: 'big grow' }, p.recipe_name || p.note),
+      p.recipe_id && h('button', { class: 'primary small', onclick: () => openCook(p.recipe_id, S.today) }, '👩‍🍳 Lag maten')),
     h('div', null,
       cook ? `${cook} lager mat` : h('span', { class: 'need-cook' }, 'Ingen har fått ansvaret for maten ennå'),
       total ? ` · ${mins(total)} · start senest ${startBy(total)} for å spise ${S.settings.dinner_time}` : ''));
@@ -340,10 +348,12 @@ function dayCard(date) {
   }
 
   const total = (p.prep_min || 0) + (p.cook_min || 0);
-  card.append(h('button', {
-    class: 'dish',
-    onclick: () => (p.recipe_id ? openRecipe(p.recipe_id) : openPicker(date)),
-  }, p.recipe_name || p.note));
+  card.append(h('div', { class: 'row' },
+    h('button', {
+      class: 'dish grow',
+      onclick: () => (p.recipe_id ? openRecipe(p.recipe_id) : openPicker(date)),
+    }, p.recipe_name || p.note),
+    p.recipe_id && h('button', { class: 'pill', title: 'Vis oppskriften stort, til bruk på kjøkkenet', onclick: () => openCook(p.recipe_id, date) }, '👩‍🍳 Lag maten')));
   const meta = [];
   if (total) meta.push(`${timeText(p)} · start senest ${startBy(total)}`);
   if (p.recipe_id && p.note) meta.push(p.note);
@@ -523,6 +533,7 @@ function openRecipe(id) {
   openDialog(r.name, [
     h('div', { class: 'row', style: 'align-items:flex-start' },
       h('div', { class: 'muted grow' }, [timeText(r), total ? `${mins(total)} totalt` : '', `${r.servings} porsjoner`].filter(Boolean).join(' · ')),
+      h('button', { class: 'pill', onclick: () => openRecipeForm(null, { copyOf: r }), title: 'Lag en ny oppskrift med denne som utgangspunkt' }, '⧉ Kopier'),
       h('button', { class: 'pill', onclick: () => openRecipeForm(r) }, '✎ Endre')),
     h('div', { class: 'card' },
       h('div', { class: 'section-title', style: 'margin:0 0 6px' }, 'Ingredienser'),
@@ -535,16 +546,18 @@ function openRecipe(id) {
     r.instructions && h('div', { class: 'card' },
       h('div', { class: 'section-title', style: 'margin:0 0 6px' }, 'Slik gjør du'),
       renderMarkdown(r.instructions)),
+    h('button', { class: 'primary', onclick: () => openCook(r.id) }, '👩‍🍳 Lag maten'),
   ]);
 }
 
-function openRecipeForm(recipe) {
-  const r = recipe || { name: '', prep_min: '', cook_min: '', servings: 4, instructions: '', ingredients: [] };
+/** Edits `recipe`, or makes a new one. With `copyOf`, the new one starts as a copy of that recipe. */
+function openRecipeForm(recipe, { copyOf = null } = {}) {
+  const r = recipe || copyOf || { name: '', prep_min: '', cook_min: '', servings: 4, instructions: '', ingredients: [] };
   const known = new Set(S.pantry.map((p) => p.name));
   for (const x of S.recipes) for (const i of x.ingredients) known.add(i.name);
   const knownList = [...known].sort((a, b) => a.localeCompare(b, 'nb'));
 
-  const name = h('input', { value: r.name, placeholder: 'Taco, fiskesuppe, pannekaker …', required: true });
+  const name = h('input', { value: copyOf ? `${copyOf.name} (kopi)` : r.name, placeholder: 'Taco, fiskesuppe, pannekaker …', required: true });
   const prep = h('input', { type: 'number', min: 0, inputMode: 'numeric', value: r.prep_min });
   const cook = h('input', { type: 'number', min: 0, inputMode: 'numeric', value: r.cook_min });
   const servings = h('input', { type: 'number', min: 1, inputMode: 'numeric', value: r.servings });
@@ -596,7 +609,7 @@ function openRecipeForm(recipe) {
     if (!rows.children.length) addRow();
     dlgDirty = true;
   };
-  const web = !recipe && webRecipeSearch(fill, () => Number(servings.value) || 4,
+  const web = !recipe && !copyOf && webRecipeSearch(fill, () => Number(servings.value) || 4,
     () => Boolean(name.value.trim() || [...rows.querySelectorAll('input')].some((i) => i.value.trim())));
 
   const save = () => run(async () => {
@@ -617,7 +630,8 @@ function openRecipeForm(recipe) {
     await reload();
   });
 
-  openDialog(recipe ? 'Endre oppskrift' : 'Ny oppskrift', [
+  openDialog(recipe ? 'Endre oppskrift' : copyOf ? 'Kopier oppskrift' : 'Ny oppskrift', [
+    copyOf && h('p', { class: 'muted' }, `En ny oppskrift med alt fra «${copyOf.name}». Gi den et nytt navn og endre det som er annerledes – originalen blir som den er.`),
     web,
     h('form',{ style: 'display:grid;gap:12px', onsubmit: (e) => { e.preventDefault(); save(); } },
       h('label', { class: 'field' }, 'Navn', name),
@@ -646,6 +660,110 @@ function openRecipeForm(recipe) {
         }, 'Slett'))),
   ], { form: true });
   if (!recipe) name.focus();
+  if (copyOf) name.select();  // typing replaces the name right away
+}
+
+// ------------------------------------------------------------- kitchen view
+
+/** A large, calm view of one recipe to keep open while cooking. `date` adds who cooks and when to start. */
+function openCook(recipeId, date) {
+  closeDialog();
+  location.hash = `#cook/${recipeId}${date ? `/${date}` : ''}`;
+}
+
+// Keeps the screen from going dark while the recipe is open (where the browser allows it).
+let wakeLock = null;
+async function keepAwake(on) {
+  try {
+    if (on && !wakeLock && 'wakeLock' in navigator && document.visibilityState === 'visible') {
+      wakeLock = await navigator.wakeLock.request('screen');
+      wakeLock.addEventListener('release', () => { wakeLock = null; });
+    } else if (!on && wakeLock) {
+      await wakeLock.release();
+      wakeLock = null;
+    }
+  } catch { /* not allowed right now; the screen just behaves as usual */ }
+}
+
+// What has been ticked off, per recipe and day, so it survives the page refreshing.
+const cookKey = (recipeId, date) => `cook:${recipeId}:${date || S.today}`;
+function loadTicks(key) {
+  try { return new Set(JSON.parse(sessionStorage.getItem(key) || '[]')); } catch { return new Set(); }
+}
+function saveTicks(key, ticks) {
+  try { sessionStorage.setItem(key, JSON.stringify([...ticks])); } catch { /* private mode */ }
+}
+
+async function renderCook() {
+  const [, idText, date] = location.hash.replace('#', '').split('/');
+  const r = S.recipes.find((x) => x.id === Number(idText));
+  const back = h('button', { class: 'small', onclick: () => { location.hash = `#${lastTab}`; } }, '‹ Tilbake');
+  if (!r) {
+    view.replaceChildren(back, h('div', { class: 'card empty' }, 'Fant ikke oppskriften. Kanskje den er slettet?'));
+    return;
+  }
+  let plan = null;
+  if (date) plan = (await api('GET', `/plan?start=${date}&days=1`))[0] || null;
+  keepAwake(true);
+
+  const key = cookKey(r.id, date);
+  const ticks = loadTicks(key);
+  const tickable = (el, id) => {
+    el.classList.add('tick');
+    el.classList.toggle('done', ticks.has(id));
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('a')) return;  // let links work
+      if (ticks.has(id)) ticks.delete(id); else ticks.add(id);
+      el.classList.toggle('done', ticks.has(id));
+      saveTicks(key, ticks);
+    });
+    return el;
+  };
+
+  const total = r.prep_min + r.cook_min;
+  const cook = plan && memberName(plan.cook_id);
+  const meta = [
+    date && fmtDay(date),
+    cook && `${cook} lager mat`,
+    timeText(r),
+    total && date === S.today ? `start senest ${startBy(total)}` : '',
+    `${r.servings} porsjoner`,
+  ].filter(Boolean).join(' · ');
+
+  const main = r.ingredients.filter((i) => !i.side);
+  const sides = r.ingredients.filter((i) => i.side);
+  const ingredients = h('section', { class: 'card cook-ings' },
+    h('div', { class: 'section-title' }, 'Ingredienser'),
+    main.length
+      ? h('div', { class: 'cook-list' }, main.map((i, n) => {
+        const amount = [qtyText(i.quantity), i.unit].filter(Boolean).join(' ');
+        return tickable(h('div', { class: 'cook-ing', role: 'button' },
+          h('span', { class: 'box', 'aria-hidden': 'true' }),
+          h('span', null, amount && h('strong', null, amount + ' '), i.name)), `i${n}`);
+      }))
+      : h('div', { class: 'muted' }, 'Ingen ingredienser lagt inn.'),
+    sides.length > 0 && h('div', { class: 'section-title', style: 'margin-top:14px' }, 'Tilbehør på bordet'),
+    sides.length > 0 && h('div', { class: 'chips' }, sides.map((i) => h('span', { class: 'tag plain' }, i.name))));
+
+  const steps = h('section', { class: 'card cook-steps' }, h('div', { class: 'section-title' }, 'Slik gjør du'));
+  if (r.instructions) {
+    const md = renderMarkdown(r.instructions);
+    [...md.querySelectorAll('li, .md > p')].forEach((el, n) => tickable(el, `s${n}`));
+    steps.append(md);
+  } else {
+    steps.append(h('div', { class: 'muted' }, 'Ingen fremgangsmåte lagt inn.'));
+  }
+
+  view.replaceChildren(h('div', { class: 'cook' },
+    h('div', { class: 'row' }, back, h('div', { class: 'grow' }),
+      h('button', { class: 'small ghost', onclick: () => { ticks.clear(); saveTicks(key, ticks); render(); } }, 'Nullstill'),
+      h('button', { class: 'small ghost', onclick: () => openRecipeForm(r) }, '✎ Endre')),
+    h('div', null,
+      h('h1', { class: 'cook-title' }, r.name),
+      meta && h('div', { class: 'muted cook-meta' }, meta),
+      plan && plan.note && h('div', { class: 'cook-note' }, plan.note)),
+    h('p', { class: 'muted' }, 'Trykk på en ingrediens eller et steg for å krysse det av.'),
+    h('div', { class: 'cook-grid' }, ingredients, steps)));
 }
 
 /**

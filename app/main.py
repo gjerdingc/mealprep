@@ -337,10 +337,20 @@ def _recipe_values(body: RecipeIn):
     )
 
 
+def _check_name_free(c, name, recipe_id=None):
+    """Recipe names are unique; say so plainly instead of failing on the database constraint."""
+    row = c.execute(
+        "SELECT id FROM recipes WHERE name=? COLLATE NOCASE AND id IS NOT ?", (name, recipe_id)
+    ).fetchone()
+    if row:
+        raise HTTPException(409, f"Det finnes allerede en oppskrift som heter «{name}»")
+
+
 @app.post("/api/recipes")
 def create_recipe(body: RecipeIn):
     values = _recipe_values(body)
     with db.conn() as c:
+        _check_name_free(c, values[0])
         cur = c.execute(
             "INSERT INTO recipes(name, prep_min, cook_min, servings, instructions) VALUES(?,?,?,?,?)",
             values,
@@ -353,6 +363,7 @@ def create_recipe(body: RecipeIn):
 def update_recipe(recipe_id: int, body: RecipeIn):
     values = _recipe_values(body)
     with db.conn() as c:
+        _check_name_free(c, values[0], recipe_id)
         cur = c.execute(
             "UPDATE recipes SET name=?, prep_min=?, cook_min=?, servings=?, instructions=? WHERE id=?",
             (*values, recipe_id),
