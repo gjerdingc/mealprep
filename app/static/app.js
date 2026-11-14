@@ -4,6 +4,7 @@ const view = document.getElementById('view');
 const dlg = document.getElementById('dlg');
 const THEMES = [
   ['mist', 'Tåke', 'Dempet grå med blågrønt'],
+  ['haze', 'Dis', 'Litt mørkere grå med turkis'],
   ['slate', 'Skifer', 'Mørk grå med blågrønt'],
   ['', 'Automatisk', 'Følger telefonen eller PC-en'],
   ['light', 'Lys', 'Rolig og lys'],

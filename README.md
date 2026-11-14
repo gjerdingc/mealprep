@@ -23,7 +23,7 @@ an Oda cart. The interface is in Norwegian (bokmål).
   opens the recipe large and calm to keep open while cooking: ingredients and steps can be
   ticked off, the screen is kept on where the browser allows it, and it shows who cooks
   and when to start.
-- **Tema**: Tåke (mist grey with teal, the default), Skifer (dark slate with teal), Lys, Mørk,
+- **Tema**: Tåke (mist grey with teal, the default), Dis (a little darker grey with turquoise), Skifer (dark slate with teal), Lys, Mørk,
   Solskinn, or Automatisk (follows the device).
 - **Basisvarer** (pantry staples): staples you normally always have. Tap "Tomt" and the item lands on
   the shopping list.

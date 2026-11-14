@@ -71,6 +71,26 @@
 }
 :root[data-theme="mist"] .card { box-shadow: 0 1px 2px rgba(38, 48, 54, .06); }
 
+/* Dis: Tåke a little darker, with a lighter turquoise. Turquoise text uses a deeper shade
+   of the same colour so it can be read on the grey, and buttons get dark text. */
+:root[data-theme="haze"] {
+  --bg: #d9dee1;
+  --card: #e9ecee;
+  --text: #232c32;
+  --muted: #5d6970;
+  --line: #c3cacf;
+  --accent: #4fc4b8;
+  --accent-text: #0e2b28;
+  --accent-soft: #c3e7e2;
+  --accent-ink: #1b8178;
+  --warn: #965405;
+  --warn-soft: #efe0c4;
+  --danger: #a8221b;
+  --danger-soft: #f0d6d3;
+  --backdrop: linear-gradient(180deg, #c7ced2 0, #d3d9dc 140px, #d9dee1 340px);
+}
+:root[data-theme="haze"] .card { box-shadow: 0 1px 2px rgba(35, 44, 50, .08); }
+
 /* Skifer: dark slate with the same teal. Teal text is lighter so it reads on the dark background. */
 :root[data-theme="slate"] {
   --bg: #2a2f37;
@@ -306,6 +326,7 @@ dialog::backdrop { background: rgba(0, 0, 0, .45); }
 .swatch-dark { background: linear-gradient(135deg, #15181a 50%, #6fbf97 50%); }
 .swatch-sun { background: linear-gradient(135deg, #ffd98a 50%, #d6402b 50%); }
 .swatch-mist { background: linear-gradient(135deg, #d3d9dd 50%, #14857f 50%); }
+.swatch-haze { background: linear-gradient(135deg, #c7ced2 50%, #4fc4b8 50%); }
 .swatch-slate { background: linear-gradient(135deg, #2a2f37 50%, #14857f 50%); }
 .swatch-auto { background: linear-gradient(135deg, #f6f4ee 50%, #15181a 50%); }
 .top button { padding: 6px 8px; white-space: nowrap; }
