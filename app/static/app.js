@@ -939,7 +939,7 @@ async function renderStats() {
     nodes.push(h('div', { class: 'card empty' }, statsPeriod === 'all'
       ? 'Ingen middager er registrert ennå. Hver planlagte middag kommer med her dagen etter, så statistikken bygges opp av seg selv.'
       : 'Ingen middager med oppskrift i denne perioden. Prøv en lengre periode.'));
-    nodes.push(categoryEditor());
+    nodes.push(catBox && catBox.isConnected ? catBox : categoryEditor());  // redrawn in place: keep the editor
     view.replaceChildren(...nodes);
     return;
   }
@@ -1043,13 +1043,15 @@ async function renderStats() {
         h('div', { class: 'track' }, h('div', { class: 'bar', style: `width:${(i.count / mostIng) * 100}%` })),
         h('span', { class: 'val' }, String(i.count))))))));
 
-  nodes.push(categoryEditor());
+  nodes.push(catBox && catBox.isConnected ? catBox : categoryEditor());  // redrawn in place: keep the editor
   view.replaceChildren(...nodes);
 }
 
 /** Admin: the food groups and unit weights of each ingredient. Corrections are never overwritten. */
+let catBox = null;  // the open editor, kept when the charts above are refreshed
 function categoryEditor() {
   const box = h('details', { class: 'card stat-cats', open: catOpen });
+  catBox = box;
   const body = h('div', { class: 'cat-body' }, h('p', { class: 'muted' }, 'Henter …'));
   box.append(h('summary', null, h('h3', null, 'Matgrupper og vekter')),
     h('p', { class: 'muted' }, 'Claude Haiku foreslår matgrupper for hver ingrediens og hvor mye én enhet veier, som 1 boks mais = 160 g. Det dere endrer her, blir stående.'),
@@ -1059,7 +1061,14 @@ function categoryEditor() {
     const search = h('input', { type: 'search', placeholder: 'Søk etter ingrediens', value: catSearch });
     const onlyOpen = h('input', { type: 'checkbox' });
     const list = h('div', { class: 'list' });
-    const save = (path, payload) => run(async () => { await api('PUT', path, payload); toast('Lagret'); await render(); });
+    // Saves one change, marks it as set by hand, and refreshes the charts above without
+    // redrawing this list, so the page stays where it is.
+    const save = (path, payload, mark) => run(async () => {
+      await api('PUT', path, payload);
+      mark.textContent = 'satt av dere';
+      toast('Lagret');
+      await renderStats();
+    });
     const origin = (manual, known) => h('span', { class: 'cat-origin' }, manual ? 'satt av dere' : known ? 'forslag fra Haiku' : 'ikke sortert');
     const draw = () => {
       const q = search.value.trim().toLowerCase();
@@ -1067,18 +1076,33 @@ function categoryEditor() {
       const shown = cats.ingredients.filter((i) => i.name.toLowerCase().includes(q) && (!onlyOpen.checked || !i.manual || i.units.some((u) => !u.manual)));
       list.replaceChildren(h('div', { class: 'muted' }, `${shown.length} ingredienser`), ...shown.map((i) => {
         const on = new Set(i.groups || []);
+        const mark = origin(i.manual, i.groups != null);
         return h('div', { class: 'cat-ing' },
-          h('div', null, h('span', { class: 'label' }, i.name), ' ', origin(i.manual, i.groups != null)),
-          h('div', { class: 'chips' }, Object.entries(cats.groups).map(([g, text]) => h('button', {
-            class: `chip small${on.has(g) ? ' on' : ''}`,
-            onclick: () => { if (on.has(g)) on.delete(g); else on.add(g); save('/stats/ingredient', { name: i.name, groups: [...on] }); },
-          }, text))),
+          h('div', null, h('span', { class: 'label' }, i.name), ' ', mark),
+          h('div', { class: 'chips' }, Object.entries(cats.groups).map(([g, text]) => {
+            const chip = h('button', {
+              class: `chip small${on.has(g) ? ' on' : ''}`,
+              onclick: () => {
+                if (on.has(g)) on.delete(g); else on.add(g);
+                chip.classList.toggle('on', on.has(g));
+                i.groups = [...on];
+                i.manual = true;
+                save('/stats/ingredient', { name: i.name, groups: i.groups }, mark);
+              },
+            }, text);
+            return chip;
+          })),
           i.units.length > 0 && h('div', { class: 'cat-weights' }, i.units.map((u) => {
+            const unitMark = origin(u.manual, u.known);
             const grams = h('input', {
               type: 'number', min: 0, step: 'any', inputMode: 'decimal', value: u.grams ?? '', 'aria-label': `Gram i 1 ${u.unit || 'stk'} ${i.name}`,
-              onchange: () => save('/stats/weight', { name: i.name, unit: u.unit, grams: grams.value === '' ? null : Number(grams.value) }),
+              onchange: () => {
+                u.grams = grams.value === '' ? null : Number(grams.value);
+                u.manual = true;
+                save('/stats/weight', { name: i.name, unit: u.unit, grams: u.grams }, unitMark);
+              },
             });
-            return h('label', { class: 'cat-weight' }, `1 ${u.unit || 'stk'} =`, grams, 'g', origin(u.manual, u.known));
+            return h('label', { class: 'cat-weight' }, `1 ${u.unit || 'stk'} =`, grams, 'g', unitMark);
           })));
       }));
     };
