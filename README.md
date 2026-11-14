@@ -7,7 +7,8 @@ an Oda cart. The interface is in Norwegian (bokmål).
 ## What it does
 
 - **Uke** (week): pick a dinner for each day and who cooks it. Today's dinner is shown on
-  top with the time cooking has to start. The dice picks a recipe you haven't had
+  top with the time cooking has to start. From Friday at 18 and through Sunday the week view opens on
+  the coming week, since that is when it gets planned; tonight's dinner stays on top. The dice picks a recipe you haven't had
   for a while.
 - **Oppskrifter** (recipes): name, prep and cooking time, ingredients with amounts, instructions.
   "Slik gjør du" understands simple Markdown (headings, numbered and bullet lists, bold,

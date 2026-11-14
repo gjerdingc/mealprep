@@ -305,7 +305,7 @@ document.getElementById('settings-btn').addEventListener('click', openSettings);
 
 async function init() {
   try { await refresh(); } catch (e) { if (e.status !== 401) toast(e.message); return; }
-  weekStart = monday(S.today);
+  weekStart = defaultWeek();
   const params = new URLSearchParams(location.search);
   if (params.has('oda')) {
     const messages = {
@@ -333,10 +333,25 @@ function showLogin() {
 
 // --------------------------------------------------------------------- week
 
+/** The week shown first: this week, but from Friday at 18 and through the weekend the coming
+ *  week, since that is when the next week's dinners get planned. */
+function planningTime() {
+  const day = D(S.today).getDay();  // 0 = Sunday, 5 = Friday, 6 = Saturday
+  return day === 6 || day === 0 || (day === 5 && new Date().getHours() >= 18);
+}
+const defaultWeek = () => (planningTime() ? addDays(monday(S.today), 7) : monday(S.today));
+
 async function renderWeek() {
   const plan = await api('GET', `/plan?start=${weekStart}&days=7`);
   weekPlan = Object.fromEntries(plan.map((p) => [p.date, p]));
   const isThisWeek = weekStart === monday(S.today);
+  const home = defaultWeek();
+  // Tonight's dinner stays on top in the planning view too, even though it is in another week.
+  let tonight = weekPlan[S.today];
+  if (!isThisWeek && weekStart === home) {
+    tonight = (await api('GET', `/plan?start=${S.today}&days=1`))[0];
+    if (tonight) weekPlan[S.today] = tonight;  // so changing tonight keeps its cook and note
+  }
   const nodes = [
     h('div', { class: 'toolbar' },
       h('button', { class: 'small', onclick: () => { weekStart = addDays(weekStart, -7); render(); } }, '‹ Forrige'),
@@ -345,8 +360,11 @@ async function renderWeek() {
         h('div', { class: 'muted' }, `${fmtShort(weekStart)} – ${fmtShort(addDays(weekStart, 6))}`)),
       h('button', { class: 'small', onclick: () => { weekStart = addDays(weekStart, 7); render(); } }, 'Neste ›')),
   ];
-  if (isThisWeek) nodes.push(tonightCard(weekPlan[S.today]));
-  else nodes.push(h('button', { class: 'small', onclick: () => { weekStart = monday(S.today); render(); } }, 'Tilbake til denne uka'));
+  if (isThisWeek || weekStart === home) nodes.push(tonightCard(tonight));
+  if (weekStart !== home) {
+    nodes.push(h('button', { class: 'small', onclick: () => { weekStart = home; render(); } },
+      home === monday(S.today) ? 'Tilbake til denne uka' : 'Tilbake til neste uke'));
+  }
   if (!S.members.length) {
     nodes.push(h('div', { class: 'card row' },
       h('div', { class: 'grow muted' }, 'Legg til hvem som lager mat, så hver middag kan få en kokk.'),
