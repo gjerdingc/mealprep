@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="pot" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3cc7b9"/>
+      <stop offset=".55" stop-color="#14857f"/>
+      <stop offset="1" stop-color="#0c605b"/>
+    </linearGradient>
+    <linearGradient id="lid" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5fd6c8"/>
+      <stop offset="1" stop-color="#1b9a90"/>
+    </linearGradient>
+  </defs>
+  <!-- Steam -->
+  <g fill="none" stroke="#7fb3ac" stroke-width="2.6" stroke-linecap="round" opacity=".9">
+    <path d="M22 13c-2.4-2.2 2.4-4.4 0-7"/>
+    <path d="M32 11c-2.4-2.4 2.4-4.6 0-7.4"/>
+    <path d="M42 13c-2.4-2.2 2.4-4.4 0-7"/>
+  </g>
+  <!-- Handles -->
+  <rect x="2.5" y="33" width="10" height="6.5" rx="3.25" fill="#0c605b" stroke="#08413e" stroke-width="2"/>
+  <rect x="51.5" y="33" width="10" height="6.5" rx="3.25" fill="#0c605b" stroke="#08413e" stroke-width="2"/>
+  <!-- Body -->
+  <path d="M10 29h44v17a10 10 0 0 1-10 10H20a10 10 0 0 1-10-10z" fill="url(#pot)" stroke="#08413e" stroke-width="2.6" stroke-linejoin="round"/>
+  <path d="M15 35v8a6 6 0 0 0 3 5" fill="none" stroke="#c9f4ee" stroke-width="2.6" stroke-linecap="round" opacity=".8"/>
+  <!-- Lid -->
+  <path d="M8 28.5c0-6.4 10.7-10.5 24-10.5s24 4.1 24 10.5z" fill="url(#lid)" stroke="#08413e" stroke-width="2.6" stroke-linejoin="round"/>
+  <circle cx="32" cy="16.5" r="3.6" fill="#f4b860" stroke="#08413e" stroke-width="2.2"/>
+  <!-- Face -->
+  <circle cx="25" cy="40" r="2.1" fill="#08302e"/>
+  <circle cx="39" cy="40" r="2.1" fill="#08302e"/>
+  <circle cx="25.6" cy="39.3" r=".65" fill="#fff"/>
+  <circle cx="39.6" cy="39.3" r=".65" fill="#fff"/>
+  <ellipse cx="21.6" cy="44" rx="2.4" ry="1.4" fill="#e76f51" opacity=".6"/>
+  <ellipse cx="42.4" cy="44" rx="2.4" ry="1.4" fill="#e76f51" opacity=".6"/>
+  <path d="M29 44q3 3 6 0" fill="none" stroke="#08302e" stroke-width="1.8" stroke-linecap="round"/>
+</svg>
