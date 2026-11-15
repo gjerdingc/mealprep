@@ -698,7 +698,7 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
   };
   r.ingredients.filter((i) => i.side).forEach((i) => addSide(i.name));
 
-  // Fills the whole form with a recipe fetched from the web. It is saved like any other.
+  // Fills the whole form with a pasted recipe. It is saved like any other.
   const fill = (x) => {
     name.value = x.name;
     prep.value = x.prep_min;
@@ -716,7 +716,6 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
     || [...rows.querySelectorAll('input')].some((i) => i.value.trim()));
   const getServings = () => Number(servings.value) || 4;
   const paste = !recipe && !copyOf && recipePaste(fill, getServings, formHasText);
-  const web = !recipe && !copyOf && webRecipeSearch(fill, getServings, formHasText);
 
   const save = () => run(async () => {
     const ingredients = [];
@@ -750,7 +749,6 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
   openDialog(recipe ? 'Endre oppskrift' : copyOf ? 'Kopier oppskrift' : 'Ny oppskrift', [
     copyOf && h('p', { class: 'muted' }, `En ny oppskrift med alt fra «${copyOf.name}». Gi den et nytt navn og endre det som er annerledes – originalen blir som den er.`),
     paste,
-    web,
     h('form',{ style: 'display:grid;gap:12px', onsubmit: (e) => { e.preventDefault(); save(); } },
       h('label', { class: 'field' }, 'Navn', name),
       h('div', { class: 'grid3' },
@@ -1191,7 +1189,7 @@ function dragHandle() {
  * the form is filled with the recipe itself, in Norwegian and in the household's units.
  */
 function recipePaste(fill, getServings, formHasText) {
-  const box = h('details', { class: 'card web-search' });
+  const box = h('details', { class: 'card recipe-paste' });
   box.append(h('summary', null, '📋 Lim inn en oppskrift'));
   if (!S.recipe_paste) {
     box.append(h('p', { class: 'muted' }, 'Innliming er ikke satt opp ennå. Den som drifter appen må legge inn ANTHROPIC_API_KEY på serveren.'));
@@ -1235,79 +1233,6 @@ function recipePaste(fill, getServings, formHasText) {
     h('p', { class: 'muted' }, 'Kopier alt fra nettsiden – det gjør ingenting om reklame, kommentarer og menyer blir med – og lim det inn her. Du kan også lime inn bare lenken. Oppskriften ryddes, oversettes til norsk om den er på et annet språk, og fylles inn i skjemaet. Ingenting lagres før du trykker «Lagre oppskrift».'),
     text, h('div', { class: 'row wrap' }, button, pasteBtn), message);
   box.addEventListener('toggle', () => { if (box.open) setTimeout(() => text.focus(), 0); });
-  return box;
-}
-
-/**
- * "Hent fra nettet": search a recipe database and fill the form with the chosen recipe,
- * translated to Norwegian and scaled to the servings in the form.
- */
-function webRecipeSearch(fill, getServings, formHasText) {
-  const box = h('details', { class: 'card web-search' });
-  const summary = h('summary', null, '🌐 Hent oppskrift fra nettet');
-  box.append(summary);
-  if (!S.web_recipes) {
-    box.append(h('p', { class: 'muted' }, 'Nettsøk er ikke satt opp ennå. Den som drifter appen må legge inn SPOONACULAR_API_KEY og ANTHROPIC_API_KEY på serveren.'));
-    return box;
-  }
-  const query = h('input', { type: 'search', placeholder: 'F.eks. adobo, lasagne, kyllingsuppe', 'aria-label': 'Søk etter oppskrift på nettet' });
-  const button = h('button', { type: 'submit' }, 'Søk');
-  const results = h('div', { class: 'web-results' });
-  const status = (text) => results.replaceChildren(h('p', { class: 'muted' }, text));
-  let busy = false;
-
-  const pick = async (hit) => {
-    if (busy) return;
-    if (formHasText() && !confirm('Erstatte det som allerede står i skjemaet?')) return;
-    busy = true;
-    const servings = getServings();
-    status(`Henter «${hit.title}» og oversetter til norsk for ${servings} porsjoner … Det tar noen sekunder.`);
-    try {
-      fill(await api('POST', '/web-recipes/import', { id: hit.id, servings }));
-      box.open = false;
-      results.replaceChildren();
-      toast('Oppskriften er fylt ut. Se over og trykk «Lagre oppskrift».');
-    } catch (e) {
-      if (e.status !== 401) status(e.message);
-    } finally {
-      busy = false;
-    }
-  };
-
-  const form = h('form', {
-    class: 'row',
-    onsubmit: async (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const q = query.value.trim();
-      if (!q || busy) return;
-      busy = true;
-      button.disabled = true;
-      status('Søker …');
-      try {
-        const res = await api('POST', '/web-recipes/search', { query: q });
-        if (!res.results.length) return status(`Fant ingen oppskrifter for «${res.query}». Prøv et annet ord.`);
-        results.replaceChildren(
-          h('p', { class: 'muted' }, `Søkte etter «${res.query}». Velg en oppskrift, så fylles skjemaet ut på norsk.`),
-          ...res.results.map((hit) => h('button', { type: 'button', class: 'web-hit', onclick: () => pick(hit) },
-            hit.image ? h('img', { src: hit.image, alt: '', loading: 'lazy', referrerPolicy: 'no-referrer' }) : h('div', { class: 'no-image' }, '🍽'),
-            h('span', { class: 'grow' }, h('span', { class: 'web-title' }, hit.title),
-              h('span', { class: 'muted', style: 'display:block' }, [hit.minutes ? mins(hit.minutes) : '', hit.servings ? `${hit.servings} porsjoner i originalen` : ''].filter(Boolean).join(' · '))))));
-      } catch (err) {
-        if (err.status !== 401) status(err.message);
-      } finally {
-        busy = false;
-        button.disabled = false;
-      }
-    },
-  }, h('div', { class: 'grow' }, query), button);
-  // Typing a search is not "writing a recipe": don't ask before closing because of it.
-  query.addEventListener('input', (e) => e.stopPropagation());
-
-  box.append(
-    h('p', { class: 'muted' }, 'Søk på norsk eller engelsk. Oppskriften oversettes, regnes om til porsjonene du har valgt under, og fylles inn i skjemaet. Ingenting lagres før du trykker «Lagre oppskrift».'),
-    form, results);
-  box.addEventListener('toggle', () => { if (box.open) setTimeout(() => query.focus(), 0); });
   return box;
 }
 

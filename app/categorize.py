@@ -14,7 +14,7 @@ from pydantic import BaseModel
 
 from . import db, web_recipes
 
-MODEL = web_recipes.MODEL  # the same Claude Haiku the web recipes use
+MODEL = web_recipes.MODEL  # the same Claude Haiku that reads pasted recipes
 
 # Food groups an ingredient can belong to (several at once), in display order.
 GROUPS = {

@@ -141,7 +141,6 @@ def state():
                 for r in c.execute("SELECT * FROM pantry ORDER BY category, name COLLATE NOCASE")
             ],
             "oda_connected": oda.is_connected(),
-            "web_recipes": web_recipes.is_configured(),
             "recipe_paste": web_recipes.can_paste(),
             "gcal": gcal.status(c),
         }
@@ -396,25 +395,8 @@ def update_recipe(recipe_id: int, body: RecipeIn):
     return {"ok": True}
 
 
-class WebSearchIn(BaseModel):
-    query: str
-
-
-class WebImportIn(BaseModel):
-    id: int
-    servings: int = 4
-
-
-@app.post("/api/web-recipes/search")
-async def web_recipe_search(body: WebSearchIn):
-    try:
-        return await web_recipes.search(body.query[:100])
-    except web_recipes.WebRecipeError as e:
-        raise HTTPException(502, str(e))
-
-
 def _household_words():
-    """The units and ingredient names already in use, so fetched recipes use the same ones."""
+    """The units and ingredient names already in use, so pasted recipes use the same ones."""
     with db.conn() as c:
         known = sorted(
             {r["name"] for r in c.execute("SELECT name FROM pantry")}
@@ -422,15 +404,6 @@ def _household_words():
             key=str.lower,
         )
         return get_list(c, "units"), known
-
-
-@app.post("/api/web-recipes/import")
-async def web_recipe_import(body: WebImportIn):
-    """Returns the recipe ready for the recipe form. Nothing is saved until the user saves it."""
-    try:
-        return await web_recipes.import_recipe(body.id, body.servings, *_household_words())
-    except web_recipes.WebRecipeError as e:
-        raise HTTPException(502, str(e))
 
 
 class RecipePasteIn(BaseModel):

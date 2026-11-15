@@ -56,15 +56,11 @@ an Oda cart. The interface is in Norwegian (bokmål).
   adverts, comments and menus and all, and paste it in, or paste only the link. Claude Haiku
   picks out the recipe and fills the form: a short name, times, servings, ingredients in your
   units and with the names you already use, their headings ("Saus", "Deig") and notes
-  ("finhakket"), sides, and the method as numbered steps. Recipes in other languages are
+  ("finhakket"), sides, and "Slik gjør du" as Markdown: numbered steps, a heading per part, oven
+  temperatures and times in bold, and the recipe's tips last. Recipes in other languages are
   translated to Norwegian, and cups and ounces become dl and g. Amounts are not scaled; the
   servings are the recipe's own. Nothing is saved until you press "Lagre oppskrift". Some
   sites refuse to be fetched by link; then paste the text. Needs `ANTHROPIC_API_KEY`.
-- **Hent oppskrift fra nettet** (in "Ny oppskrift"): search for a dish, for example "adobo",
-  in Spoonacular's recipe database. The chosen recipe is scaled to the servings in the
-  form, translated to Norwegian by Claude Haiku (units converted to dl, ss, g and so on,
-  ingredient names matched to the ones you already use) and filled into the form. Nothing
-  is saved until you press "Lagre oppskrift". Needs the two API keys below.
 - **Google Kalender**: each dinner is put in the Google Calendar of whoever cooks it, from
   the start-cooking time to dinner time, and kept up to date when the plan, the recipe,
   the cook or the dinner time changes. A day with no cook gets no event, and events for
@@ -96,8 +92,7 @@ Then open http://localhost:8123. Data is stored in `data/mealprep.db`.
 | `APP_PASSWORD` | Household password. If empty, the app is open to anyone who can reach it. |
 | `DATA_DIR`     | Folder for the database. `/data` in the container.                      |
 | `TZ`           | Time zone used to decide what "today" is. Defaults to `Europe/Oslo`.    |
-| `SPOONACULAR_API_KEY` | Optional. Free key from spoonacular.com/food-api, for the recipe search. The free plan has a daily limit. |
-| `ANTHROPIC_API_KEY`   | Optional. Key from console.anthropic.com, used to read pasted recipes, translate fetched ones, and to sort ingredients and dishes for the statistics (Claude Haiku, well under 1 øre per recipe or batch of names). |
+| `ANTHROPIC_API_KEY`   | Optional. Key from console.anthropic.com, used to read pasted recipes and to sort ingredients and dishes for the statistics (Claude Haiku, well under 1 øre per recipe or batch of names). |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Optional. The whole JSON key of a Google service account, for Google Calendar. `GOOGLE_SERVICE_ACCOUNT_FILE` (a path to the key file) works too. |
 
 ### Google Calendar setup (one time)
@@ -123,7 +118,7 @@ app only ever changes the dinner events it created.
 Portainer stack from this repository, compose path `docker-compose.yml`.
 Set these stack environment variables: `APP_PASSWORD` (the household password; the
 app stores an Oda sign-in, so do not leave it empty on a public address), and
-`ANTHROPIC_API_KEY` to turn on pasting recipes (and, with `SPOONACULAR_API_KEY`, the recipe search), and
+`ANTHROPIC_API_KEY` to turn on pasting recipes and the statistics' food groups, and
 `GOOGLE_SERVICE_ACCOUNT_JSON` for Google Calendar.
 
 The container `mealprep` has no host port. It joins the external Docker network `proxy`

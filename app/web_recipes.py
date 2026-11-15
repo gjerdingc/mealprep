@@ -1,10 +1,8 @@
-"""Recipes from the web: Spoonacular finds them, Claude Haiku turns them into Norwegian.
-A recipe can also be pasted in as text, or as a link, and Claude reads it into the form.
+"""Recipes pasted in from the web: Claude Haiku reads them into the recipe form.
 
-Spoonacular's recipes are in English with US measures. The amounts are scaled here
-(plain arithmetic, so it is exact), then Claude translates names and steps, converts
-to the household's units and reuses ingredient names the household already has, so
-the shopping list and the Oda search work as for a hand-written recipe.
+Whatever was copied from a recipe page (or the page a pasted link goes to) is turned
+into a Norwegian recipe in the household's units, reusing ingredient names the household
+already has, so the shopping list and the Oda search work as for a hand-written recipe.
 """
 
 import asyncio
@@ -18,7 +16,6 @@ import anthropic
 import httpx
 from pydantic import BaseModel
 
-SPOONACULAR_URL = "https://api.spoonacular.com"
 MODEL = "claude-haiku-5-5"
 TIMEOUT = httpx.Timeout(20.0)
 
@@ -27,23 +24,8 @@ class WebRecipeError(Exception):
     pass
 
 
-def _spoonacular_key():
-    return os.environ.get("SPOONACULAR_API_KEY", "").strip()
-
-
 def can_paste():
     return bool(os.environ.get("ANTHROPIC_API_KEY", "").strip())
-
-
-def is_configured():
-    return bool(_spoonacular_key() and can_paste())
-
-
-def _check_configured():
-    if not is_configured():
-        raise WebRecipeError(
-            "Nettsøk er ikke satt opp. Legg inn SPOONACULAR_API_KEY og ANTHROPIC_API_KEY på serveren."
-        )
 
 
 _claude = None
@@ -54,48 +36,6 @@ def _client():
     if _claude is None:
         _claude = anthropic.AsyncAnthropic()
     return _claude
-
-
-# ------------------------------------------------------------------- Spoonacular
-
-
-async def _spoonacular(path, params):
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT) as http:
-            res = await http.get(
-                SPOONACULAR_URL + path, params=params, headers={"x-api-key": _spoonacular_key()}
-            )
-    except httpx.HTTPError as e:
-        raise WebRecipeError(f"Fikk ikke kontakt med oppskriftsdatabasen: {e}") from e
-    if res.status_code in (401, 403):
-        raise WebRecipeError("Oppskriftsdatabasen godtok ikke API-nøkkelen (SPOONACULAR_API_KEY).")
-    if res.status_code == 402:
-        raise WebRecipeError("Dagens gratiskvote hos oppskriftsdatabasen er brukt opp. Prøv igjen i morgen.")
-    if res.status_code >= 400:
-        raise WebRecipeError(f"Oppskriftsdatabasen svarte {res.status_code}.")
-    return res.json()
-
-
-# --------------------------------------------------------------------- Claude
-
-
-class _Query(BaseModel):
-    english: str
-
-
-class Ingredient(BaseModel):
-    name: str
-    quantity: float | None
-    unit: str
-    side: bool
-
-
-class _Recipe(BaseModel):
-    name: str
-    prep_min: int
-    cook_min: int
-    instructions: str
-    ingredients: list[Ingredient]
 
 
 async def _ask(system, prompt, output, effort):
@@ -113,156 +53,6 @@ async def _ask(system, prompt, output, effort):
     if res.stop_reason == "refusal" or res.parsed_output is None:
         raise WebRecipeError("Klarte ikke å lese oppskriften. Prøv en annen.")
     return res.parsed_output
-
-
-async def _to_english(query):
-    out = await _ask(
-        "You turn a dish search into a short English search term for an English recipe "
-        "database. The user writes in Norwegian, but often types dish names from other "
-        "cuisines (bistek, adobo, sinigang, pad thai, tikka masala, bibimbap). Those are "
-        "names, not Norwegian words: return them unchanged. Translate only Norwegian words "
-        "(kyllingsuppe: chicken soup; fiskegrateng: fish gratin). For a Norwegian dish with "
-        "no English name, describe it the way an English recipe title would (lapskaus: beef "
-        "potato stew). Never add a country, cuisine or other words the user did not type or "
-        "imply. When unsure, return the text unchanged. Reply with the search term only.",
-        query,
-        _Query,
-        "low",
-    )
-    return out.english.strip() or query
-
-
-# ---------------------------------------------------------------------- public
-
-
-async def _complex_search(params):
-    data = await _spoonacular(
-        "/recipes/complexSearch", {"number": 12, "addRecipeInformation": "true", **params}
-    )
-    return [
-        {
-            "id": r.get("id"),
-            "title": r.get("title") or "",
-            "image": r.get("image"),
-            "minutes": r.get("readyInMinutes"),
-            "servings": r.get("servings"),
-        }
-        for r in data.get("results") or []
-    ]
-
-
-async def _site_search(term):
-    """The search on spoonacular.com. It covers recipes the recipe search misses."""
-    data = await _spoonacular("/food/search", {"query": term, "number": 12})
-    for group in data.get("searchResults") or []:
-        if group.get("name") == "Recipes":
-            return [
-                {"id": r["id"], "title": r.get("name") or "", "image": r.get("image"), "minutes": None, "servings": None}
-                for r in group.get("results") or []
-                if isinstance(r.get("id"), int)
-            ]
-    return []
-
-
-async def search(query):
-    """Finds recipes for a dish name in Norwegian or English.
-    Returns {query: the search term that found them, results: [{id, title, image, minutes, servings}]}."""
-    _check_configured()
-    query = query.strip()
-    if not query:
-        return {"query": "", "results": []}
-    english = await _to_english(query)
-    terms = [english] + ([query] if query.lower() != english.lower() else [])
-    # Cheapest first. The recipe search reads some words as ingredients ("adobo" becomes
-    # the seasoning) and finds nothing, so then search the titles. Some recipes (bistek)
-    # are only found by the site's own search, which costs a few more points.
-    attempts = [(t, _complex_search, {"query": t, "instructionsRequired": "true"}) for t in terms]
-    attempts += [(t, _complex_search, {"titleMatch": t}) for t in terms]
-    attempts += [(t, _site_search, t) for t in reversed(terms)]  # what the user typed first
-    for term, fn, arg in attempts:
-        results = await fn(arg)
-        if results:
-            return {"query": term, "results": results}
-    return {"query": query, "results": []}
-
-
-def _number(x):
-    return round(x, 2) if isinstance(x, (int, float)) else x
-
-
-def _steps(info):
-    steps = [s.get("step", "").strip() for block in info.get("analyzedInstructions") or [] for s in block.get("steps") or []]
-    if any(steps):
-        return "\n".join(f"{i}. {s}" for i, s in enumerate((s for s in steps if s), 1))
-    text = re.sub(r"<[^>]+>", " ", info.get("instructions") or "")
-    return " ".join(html.unescape(text).split())
-
-
-def _minutes(value):
-    return f"{value} min" if isinstance(value, int) and value > 0 else "unknown"
-
-
-async def import_recipe(recipe_id, servings, units, known_names):
-    """Fetches a recipe and returns it as a filled-in recipe form (not saved)."""
-    _check_configured()
-    servings = max(1, min(int(servings or 4), 50))
-    info = await _spoonacular(f"/recipes/{int(recipe_id)}/information", {"includeNutrition": "false"})
-    original = info.get("servings") or servings
-    factor = servings / original
-
-    lines = []
-    for ing in info.get("extendedIngredients") or []:
-        metric = (ing.get("measures") or {}).get("metric") or {}
-        amount = metric.get("amount", ing.get("amount"))
-        unit = metric.get("unitShort") or ing.get("unit") or ""
-        scaled = _number(amount * factor) if isinstance(amount, (int, float)) and amount else None
-        lines.append(f"- {scaled if scaled is not None else ''} {unit} | {ing.get('nameClean') or ing.get('name')} | original: {ing.get('original', '')}")
-
-    prompt = f"""Recipe: {info.get('title', '')}
-Servings: {servings} (the amounts below are already scaled to this; do not scale again)
-Total time: {_minutes(info.get('readyInMinutes'))}; preparation: {_minutes(info.get('preparationMinutes'))}; cooking: {_minutes(info.get('cookingMinutes'))}
-
-Ingredients (scaled amount and unit | ingredient | original line, which is for the original {original} servings):
-{chr(10).join(lines)}
-
-Steps:
-{_steps(info)}
-
-The household's units: {', '.join(units)}
-Ingredient names the household already uses: {', '.join(known_names[:400]) or '(none yet)'}"""
-
-    system = """You turn an English recipe into a Norwegian (bokmål) recipe for a family dinner planner.
-
-- name: a natural Norwegian name for the dish. Keep the dish's own name where Norwegians use it too (Kylling adobo, Pad thai).
-- ingredients: one entry per ingredient, in the recipe's order.
-  - name: Norwegian, short and plain, the way it is written on a shopping list (Hvitløk, Soyasaus, Kyllinglår). If the household already uses a name for the same thing, use exactly that name.
-  - quantity and unit: use the household's units where they fit. Convert ml to dl (1 dl = 100 ml) for amounts of 50 ml or more, Tbsp to ss and tsp to ts, cloves to fedd, pieces to stk, grams over 1000 to kg. Round to amounts a cook would measure: whole stk and fedd, g to the nearest 5 or 10, dl and ss to the nearest half. Use quantity null and unit "" for things measured to taste (salt, pepper) or with no amount.
-  - side: true only for something served on the table that people help themselves to and has no amount in the cooking (steamed rice served on the side, bread, pickles). Ingredients cooked into the dish are false.
-- prep_min and cook_min: whole minutes. Use the times given when they exist; otherwise split the total time sensibly. Use 0 when nothing is known.
-- instructions: the steps translated into clear Norwegian, numbered "1. ", "2. " on separate lines. Use the household's units in the text and Celsius for oven temperatures. Do not add steps that are not in the recipe."""
-
-    out = await _ask(system, prompt, _Recipe, "medium")
-    instructions = out.instructions.strip()
-    if info.get("sourceUrl"):
-        instructions += f"\n\nKilde: {info['sourceUrl']}"
-    return {
-        "name": out.name.strip(),
-        "prep_min": max(0, out.prep_min),
-        "cook_min": max(0, out.cook_min),
-        "servings": servings,
-        "instructions": instructions,
-        "ingredients": [
-            {
-                "name": i.name.strip(),
-                "quantity": None if i.side or i.quantity is None else round(i.quantity, 2),
-                "unit": "" if i.side else i.unit.strip(),
-                "side": i.side,
-            }
-            for i in out.ingredients
-            if i.name.strip()
-        ],
-        "image": info.get("image"),
-    }
 
 
 # ---------------------------------------------------------------- pasted recipes
@@ -363,7 +153,13 @@ Write everything in Norwegian (bokmål). If the recipe is in another language, t
   - note: a few words, only when the line says something the cook needs that is not in the name: "finhakket", "til steking", "romtemperert", "kan sløyfes". Otherwise "".
   - section: when the recipe splits its ingredients under headings ("Saus", "Deig", "Topping"), the heading for that ingredient; "" when it does not, and "" for all if there is only one group.
   - side: true only for something put on the table that people help themselves to and that has no amount (bread, steamed rice "to serve", pickles). Ingredients cooked into the dish are false.
-- instructions: the method in Markdown, steps numbered "1. ", "2. " on separate lines, one step per thing to do. If the recipe has parts, put a "## " heading before each part's steps and start numbering again. Use the same units as in the ingredients and Celsius for oven temperatures. Real tips from the recipe (storing, swaps, serving) go last as lines starting with "> ". Do not add steps or advice that are not in the recipe."""
+- instructions: the method, written as Markdown. This is what the cook reads at the stove, so make it easy to follow at a glance:
+  - Steps as a numbered list, "1. ", "2. ", each on its own line, one step per thing to do. Split long paragraphs into steps.
+  - If the recipe has parts (marinade, sauce, dough, serving), put a "## " heading before each part's steps and start numbering again at 1. No heading when there is only one part.
+  - Put ** around the few things that are easy to miss: oven temperatures and times ("**200 °C** i **25 minutter**"). Do not bold whole sentences or every ingredient.
+  - Real tips from the recipe (storing, swaps, serving suggestions) go last, each as a line starting with "> ".
+  - Blank line between a heading, a list and a tip. No other Markdown (no tables, no images, no code, no "# " title: the name is shown above).
+  - Use the same units as in the ingredients and Celsius for oven temperatures. Do not add steps or advice that are not in the recipe."""
 
 
 async def from_text(text, units, known_names, default_servings=4):
@@ -406,7 +202,7 @@ Ingredient names the household already uses: {', '.join(known_names[:400]) or '(
         )
     instructions = out.instructions.strip()
     if source:
-        instructions += f"\n\nKilde: {source}"
+        instructions += f"\n\nKilde: [{httpx.URL(source).host.removeprefix('www.')}]({source})"
     return {
         "name": out.name.strip(),
         "prep_min": max(0, out.prep_min),

@@ -17,8 +17,7 @@ services:
       TZ: Europe/Oslo
       # Household password for the app, set in the stack's Environment variables.
       APP_PASSWORD: ${APP_PASSWORD}
-      # Optional: recipe search on the web (Spoonacular) with Norwegian translation (Claude).
-      SPOONACULAR_API_KEY: ${SPOONACULAR_API_KEY:-}
+      # Optional: reading pasted recipes into the form, and food groups for the statistics (Claude).
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       # Optional: dinners in Google Calendar. The whole service account key (JSON) as one value.
       GOOGLE_SERVICE_ACCOUNT_JSON: ${GOOGLE_SERVICE_ACCOUNT_JSON:-}
