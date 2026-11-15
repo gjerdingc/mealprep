@@ -712,8 +712,11 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
     if (!rows.children.length) addRow();
     dlgDirty = true;
   };
-  const web = !recipe && !copyOf && webRecipeSearch(fill, () => Number(servings.value) || 4,
-    () => Boolean(name.value.trim() || [...rows.querySelectorAll('input')].some((i) => i.value.trim())));
+  const formHasText = () => Boolean(name.value.trim() || instructions.value.trim()
+    || [...rows.querySelectorAll('input')].some((i) => i.value.trim()));
+  const getServings = () => Number(servings.value) || 4;
+  const paste = !recipe && !copyOf && recipePaste(fill, getServings, formHasText);
+  const web = !recipe && !copyOf && webRecipeSearch(fill, getServings, formHasText);
 
   const save = () => run(async () => {
     const ingredients = [];
@@ -746,6 +749,7 @@ function openRecipeForm(recipe, { copyOf = null } = {}) {
 
   openDialog(recipe ? 'Endre oppskrift' : copyOf ? 'Kopier oppskrift' : 'Ny oppskrift', [
     copyOf && h('p', { class: 'muted' }, `En ny oppskrift med alt fra «${copyOf.name}». Gi den et nytt navn og endre det som er annerledes – originalen blir som den er.`),
+    paste,
     web,
     h('form',{ style: 'display:grid;gap:12px', onsubmit: (e) => { e.preventDefault(); save(); } },
       h('label', { class: 'field' }, 'Navn', name),
@@ -1180,6 +1184,58 @@ function dragHandle() {
     window.addEventListener('pointercancel', stop);
   });
   return handle;
+}
+
+/**
+ * "Lim inn oppskrift": paste everything copied from a recipe page (or just its link), and
+ * the form is filled with the recipe itself, in Norwegian and in the household's units.
+ */
+function recipePaste(fill, getServings, formHasText) {
+  const box = h('details', { class: 'card web-search' });
+  box.append(h('summary', null, '📋 Lim inn en oppskrift'));
+  if (!S.recipe_paste) {
+    box.append(h('p', { class: 'muted' }, 'Innliming er ikke satt opp ennå. Den som drifter appen må legge inn ANTHROPIC_API_KEY på serveren.'));
+    return box;
+  }
+  const text = h('textarea', { rows: 6, placeholder: 'Lim inn hele oppskriften her – eller bare lenken til den', 'aria-label': 'Oppskrift som tekst eller lenke' });
+  const button = h('button', { type: 'button', class: 'primary' }, 'Fyll ut skjemaet');
+  const message = h('p', { class: 'muted', hidden: true });
+  const status = (t) => { message.textContent = t; message.hidden = !t; };
+  const read = async () => {
+    const value = text.value.trim();
+    if (!value || button.disabled) return;
+    if (formHasText() && !confirm('Erstatte det som allerede står i skjemaet?')) return;
+    button.disabled = true;
+    status(/^https?:\/\/\S+$/.test(value) ? 'Henter siden og leser oppskriften … Det tar noen sekunder.' : 'Leser oppskriften … Det tar noen sekunder.');
+    try {
+      fill(await api('POST', '/web-recipes/paste', { text: value, servings: getServings() }));
+      text.value = '';
+      status('');
+      box.open = false;
+      toast('Oppskriften er fylt ut. Se over og trykk «Lagre oppskrift».');
+    } catch (e) {
+      if (e.status !== 401) status(e.message);
+    } finally {
+      button.disabled = false;
+    }
+  };
+  button.addEventListener('click', read);
+  const pasteBtn = navigator.clipboard?.readText && h('button', {
+    type: 'button',
+    onclick: async () => {
+      try {
+        const clip = await navigator.clipboard.readText();
+        if (clip.trim()) { text.value = clip; read(); } else status('Utklippstavla er tom.');
+      } catch { status('Fikk ikke lese utklippstavla. Lim inn i feltet i stedet.'); }
+    },
+  }, '📋 Lim inn fra utklippstavla');
+  // The pasted text is raw material, not the recipe being written: no "discard changes?" for it.
+  text.addEventListener('input', (e) => e.stopPropagation());
+  box.append(
+    h('p', { class: 'muted' }, 'Kopier alt fra nettsiden – det gjør ingenting om reklame, kommentarer og menyer blir med – og lim det inn her. Du kan også lime inn bare lenken. Oppskriften ryddes, oversettes til norsk om den er på et annet språk, og fylles inn i skjemaet. Ingenting lagres før du trykker «Lagre oppskrift».'),
+    text, h('div', { class: 'row wrap' }, button, pasteBtn), message);
+  box.addEventListener('toggle', () => { if (box.open) setTimeout(() => text.focus(), 0); });
+  return box;
 }
 
 /**

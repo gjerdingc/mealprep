@@ -142,6 +142,7 @@ def state():
             ],
             "oda_connected": oda.is_connected(),
             "web_recipes": web_recipes.is_configured(),
+            "recipe_paste": web_recipes.can_paste(),
             "gcal": gcal.status(c),
         }
 
@@ -412,18 +413,36 @@ async def web_recipe_search(body: WebSearchIn):
         raise HTTPException(502, str(e))
 
 
-@app.post("/api/web-recipes/import")
-async def web_recipe_import(body: WebImportIn):
-    """Returns the recipe ready for the recipe form. Nothing is saved until the user saves it."""
+def _household_words():
+    """The units and ingredient names already in use, so fetched recipes use the same ones."""
     with db.conn() as c:
-        units = get_list(c, "units")
         known = sorted(
             {r["name"] for r in c.execute("SELECT name FROM pantry")}
             | {r["name"] for r in c.execute("SELECT DISTINCT name FROM recipe_ingredients")},
             key=str.lower,
         )
+        return get_list(c, "units"), known
+
+
+@app.post("/api/web-recipes/import")
+async def web_recipe_import(body: WebImportIn):
+    """Returns the recipe ready for the recipe form. Nothing is saved until the user saves it."""
     try:
-        return await web_recipes.import_recipe(body.id, body.servings, units, known)
+        return await web_recipes.import_recipe(body.id, body.servings, *_household_words())
+    except web_recipes.WebRecipeError as e:
+        raise HTTPException(502, str(e))
+
+
+class RecipePasteIn(BaseModel):
+    text: str
+    servings: int = 4  # used when the recipe does not say how many it is for
+
+
+@app.post("/api/web-recipes/paste")
+async def web_recipe_paste(body: RecipePasteIn):
+    """Reads a pasted recipe (or a link to one) into the recipe form. Nothing is saved here."""
+    try:
+        return await web_recipes.from_text(body.text, *_household_words(), body.servings)
     except web_recipes.WebRecipeError as e:
         raise HTTPException(502, str(e))
 
