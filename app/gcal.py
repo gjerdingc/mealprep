@@ -253,13 +253,19 @@ def forget_event(c, day):
         )
 
 
+_sync_lock = threading.Lock()
+
+
 def sync_days(days):
     """Brings the Google events for these days in line with the plan.
 
     Runs after the plan is saved and committed; errors are stored, never raised.
     Days before today are left alone. Returns the first error message, or None.
     """
-    with db.conn() as c:
+    # One sync at a time. Two saves of the same day close together (a double tap on the
+    # cook) would otherwise both find the day without an event and each create one, and
+    # only the last one's ID would be kept: a second event the app can never remove.
+    with _sync_lock, db.conn() as c:
         if not is_enabled(c):
             return None
         first_error = _flush_deletes(c)
