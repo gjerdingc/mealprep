@@ -1,81 +1,18 @@
 # Middagsplan
 
-A small web app for planning family dinners: your own recipes, a week plan with a
-cook assigned to each day, pantry staples, and a shopping list that can be sent to
-an Oda cart. The interface is in Norwegian (bokmål).
+Planlegg ukens middager for familien: egne oppskrifter, hvem som lager mat hvilken dag,
+og en handleliste som kan sendes rett til Oda-handlekurven.
 
-## What it does
+## Hva du får
 
-- **Uke** (week): pick a dinner for each day and who cooks it. Today's dinner is shown on
-  top with the time cooking has to start. From Friday at 18 and through Sunday the week view opens on
-  the coming week, since that is when it gets planned; tonight's dinner stays on top. The dice picks a recipe you haven't had
-  for a while.
-- **Oppskrifter** (recipes): name, prep and cooking time, ingredients with amounts, instructions.
-  "Slik gjør du" understands simple Markdown (headings, numbered and bullet lists, bold,
-  italic, `> ` tips and links), so recipes can be pasted straight in. Plain text works as before.
-  An ingredient can have a short note, such as "i røra" and "til steking" when butter is
-  listed twice: tap the speech-bubble icon, which is filled in when there is a note. The
-  shopping list adds such amounts up for that dinner. Optional small headings
-  ("+ Legg til overskrift") split the ingredients into groups, such as the fish and a
-  "Råkost" salad. Ingredients and headings are put in order by dragging the ⠿ handle.
-  "⧉ Kopier" on a recipe starts a new recipe with everything from it (say "Pizza - Pepperoni"
-  from "Pizza - Margherita"); give it a new name and change what differs.
-- **Lag maten** (kitchen view): the "👩‍🍳 Lag maten" button on a planned dinner, or on a recipe,
-  opens the recipe large and calm to keep open while cooking: ingredients and steps can be
-  ticked off, the screen is kept on where the browser allows it, and it shows who cooks
-  and when to start.
-- **Statistikk** (Innstillinger → Statistikk): everything is worked out from the
-  ingredients. Dinners with fish per week (against the advice of 2–3), the share of
-  vegetarian dinners (no meat, chicken or fish among the ingredients) and of dinners with
-  something ultra-processed; the weight of each food group (vegetables, grains, dairy,
-  red meat, fish, legumes, fibre-rich, ultra-processed …); protein sources by weight week
-  by week and per cook; who cooks on which weekdays; and the most made dishes and most
-  used ingredients. For the last month, three months, this year or all time. Each dinner
-  is recorded the day after it was planned, with its recipe, cook and ingredients copied
-  in, so deleting or changing a recipe or a cook later does not change the history.
-  Claude Haiku sorts new ingredients into food groups and estimates the weight of one
-  unit ("1 boks mais = 160 g") when the page is opened (needs `ANTHROPIC_API_KEY`).
-  Both can be corrected under "Matgrupper og vekter" at the bottom of the page, and
-  corrections are kept. Lines with no amount are left out of the weights.
-- **Tema**: Tåke (mist grey with teal, the default), Dis (a little darker grey with turquoise), Skifer (dark slate with teal), Lys, Mørk,
-  Solskinn, or Automatisk (follows the device).
-- **Basisvarer** (pantry staples): staples you normally always have. Tap "Tomt" and the item lands on
-  the shopping list.
-- **Handleliste** (shopping list): the ingredients for the coming days' dinners, grouped under
-  each dish, with ingredients used by several dishes under "Delt". Amounts in the same unit are added up ("1 stk Agurk"
-  from ½ + ½), with the amount for each dish shown under the name; "+ mer" means a dish
-  needs it without saying how much. Different units, such as sugar in ss for one dish and
-  ts for another, are not added up but still share one line. Oda suggests counted things
-  rounded up, one pack per dish for g and kg, and one pack for ss, dl and the like. Ingredients that are pantry staples in stock are listed separately. Tick
-  off what you have, add anything else, and press "Ferdig handlet" when it is bought.
-- **Oda**: connect an Oda account under Innstillinger. "Fyll Oda-handlekurven" then looks up
-  each item at Oda, lets you choose the product, and adds them to the cart. The app
-  remembers the product chosen for each ingredient. Payment and delivery time are
-  always done at oda.com; the app cannot order anything.
-- **Lim inn en oppskrift** (in "Ny oppskrift"): copy everything from a recipe page, with
-  adverts, comments and menus and all, and paste it in, or paste only the link. Claude Haiku
-  picks out the recipe and fills the form: a short name, times, servings, ingredients in your
-  units and with the names you already use, their headings ("Saus", "Deig") and notes
-  ("finhakket"), sides, and "Slik gjør du" as Markdown: numbered steps, a heading per part, oven
-  temperatures and times in bold, and the recipe's tips last. Recipes in other languages are
-  translated to Norwegian, and cups and ounces become dl and g. Amounts are not scaled; the
-  servings are the recipe's own. Nothing is saved until you press "Lagre oppskrift". Some
-  sites refuse to be fetched by link; then paste the text. Needs `ANTHROPIC_API_KEY`.
-- **Google Kalender**: each dinner is put in the Google Calendar of whoever cooks it, from
-  the start-cooking time to dinner time, and kept up to date when the plan, the recipe,
-  the cook or the dinner time changes. A day with no cook gets no event, and events for
-  past days are left alone. If Google cannot be reached the plan is still saved; the day
-  shows a warning with "Prøv igjen", and Innstillinger has "Synk alle kommende middager".
-  The app only touches events it created itself. Each cook can get one of Google's event
-  colours, and there is a standard colour for cooks without one (Innstillinger → Google
-  Kalender); with neither, events take the calendar's colour. Several cooks can share one
-  calendar (for example a shared "Middag" calendar: enter the same calendar ID on each
-  cook), and the colour then shows who cooks.
+- **Uke**: velg middag og kokk for hver dag.
+- **Oppskrifter**: lagre egne, eller lim inn en oppskrift/lenke og la Claude fylle ut skjemaet.
+- **Handleliste**: lages automatisk fra ukens middager, kan fylles i Oda-kurven.
+- **Basisvarer**: trykk «Tomt», så havner varen på handlelisten.
+- **Google Kalender** (valgfritt): middagen legges i kalenderen til den som lager mat.
+- **Statistikk**: fisk per uke, vegetarandel, matgrupper m.m.
 
-An ingredient counts as a pantry staple when its name is the same as the staple's
-name (upper and lower case do not matter).
-
-## Run locally
+## Kom i gang
 
 ```bash
 python -m venv .venv
@@ -83,52 +20,30 @@ python -m venv .venv
 .venv/Scripts/python -m uvicorn app.main:app --port 8123
 ```
 
-Then open http://localhost:8123. Data is stored in `data/mealprep.db`.
+Åpne http://localhost:8123. Data lagres i `data/mealprep.db`.
 
-## Configuration
+## Innstillinger (miljøvariabler)
 
-| Variable       | What it is                                                              |
-| -------------- | ----------------------------------------------------------------------- |
-| `APP_PASSWORD` | Household password. If empty, the app is open to anyone who can reach it. |
-| `DATA_DIR`     | Folder for the database. `/data` in the container.                      |
-| `TZ`           | Time zone used to decide what "today" is. Defaults to `Europe/Oslo`.    |
-| `ANTHROPIC_API_KEY`   | Optional. Key from console.anthropic.com, used to read pasted recipes and to sort ingredients and dishes for the statistics (Claude Haiku, well under 1 øre per recipe or batch of names). |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Optional. The whole JSON key of a Google service account, for Google Calendar. `GOOGLE_SERVICE_ACCOUNT_FILE` (a path to the key file) works too. |
+| Variabel                      | Hva                                                         |
+| ----------------------------- | ----------------------------------------------------------- |
+| `APP_PASSWORD`                | Passord for appen. Sett alltid dette på en offentlig adresse. |
+| `ANTHROPIC_API_KEY`           | Valgfri. Trengs for innliming av oppskrifter og statistikk.  |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Valgfri. Hele JSON-nøkkelen til en Google-tjenestekonto.    |
 
-### Google Calendar setup (one time)
+Oda kobles til under Innstillinger i appen – gjør det fra adressen du faktisk bruker.
 
-1. In [Google Cloud Console](https://console.cloud.google.com/), create a project and enable
-   the **Google Calendar API**.
-2. Under *IAM & Admin → Service accounts*, create a service account (no roles needed),
-   open it, *Keys → Add key → JSON*, and download the key.
-3. Put the whole content of the key file in the stack variable `GOOGLE_SERVICE_ACCOUNT_JSON`
-   and redeploy. Never commit the key.
-4. Each cook opens Google Calendar → *Settings* → their calendar → *Share with specific
-   people*, adds the service account's email (shown in Innstillinger in the app, ends in
-   `iam.gserviceaccount.com`) with **Make changes to events**.
-5. In the app, Innstillinger → Google Kalender: enter each cook's calendar ID (for a main
-   calendar it is the Gmail address; otherwise see *Integrate calendar* in the calendar's
-   settings), and tick "Legg middagene inn i Google Kalender".
+## Google Kalender (valgfritt)
 
-The service account can read and change everything on a calendar shared with it, but the
-app only ever changes the dinner events it created.
+1. Lag en tjenestekonto i [Google Cloud Console](https://console.cloud.google.com/) med
+   **Google Calendar API** på, og last ned en JSON-nøkkel.
+2. Legg nøkkelen i `GOOGLE_SERVICE_ACCOUNT_JSON`.
+3. Hver kokk deler kalenderen sin med tjenestekontoens e-post (vises i appen) med
+   **Gjøre endringer i aktiviteter**.
+4. I appen: Innstillinger → Google Kalender → legg inn kalender-ID per kokk.
 
-## Deployment
+## Drift
 
-Portainer stack from this repository, compose path `docker-compose.yml`.
-Set these stack environment variables: `APP_PASSWORD` (the household password; the
-app stores an Oda sign-in, so do not leave it empty on a public address), and
-`ANTHROPIC_API_KEY` to turn on pasting recipes and the statistics' food groups, and
-`GOOGLE_SERVICE_ACCOUNT_JSON` for Google Calendar.
-
-The container `mealprep` has no host port. It joins the external Docker network `proxy`
-and serves plain HTTP on port 8080. Point Traefik at `http://mealprep:8080`; Traefik
-terminates HTTPS.
-
-The database is kept in `/opt/mealprep` on the host. Back up that folder to keep
-your recipes.
-
-To update, use **Pull and redeploy** on the stack.
-
-Connect Oda from the address you actually use the app on: the sign-in returns to
-that address, so a connection made on `localhost` does not carry over.
+Portainer-stack fra dette repoet (`docker-compose.yml`). Containeren serverer HTTP på
+port 8080 på Docker-nettverket `proxy`; pek Traefik på `http://mealprep:8080`.
+Databasen ligger i `/opt/mealprep` på verten – ta backup av den. Oppdater med
+**Pull and redeploy**.
