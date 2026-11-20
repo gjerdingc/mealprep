@@ -3,6 +3,8 @@
 Planlegg ukens middager for familien: egne oppskrifter, hvem som lager mat hvilken dag,
 og en handleliste som kan sendes rett til Oda-handlekurven. Middagene legger seg inn i kalenderen med en navngitt kokk.
 
+![Ukevisningen i Middagsplan](docs/screenshot.png)
+
 ## Hva du får
 
 - **Uke**: velg middag og kokk for hver dag.
